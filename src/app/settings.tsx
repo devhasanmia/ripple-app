@@ -1,35 +1,35 @@
-import React, { useState, useEffect } from "react";
-import { usePathname } from "expo-router";
-import {
-  SafeAreaView,
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Switch,
-  Alert,
-  StatusBar,
-} from "react-native";
 import { LoadingScreen } from "@/components/loading-screen";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Image,
+  ScrollView,
+  StatusBar,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+let hasLoadedSettings = false;
 
 export default function SettingsScreen() {
-  const pathname = usePathname();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!hasLoadedSettings);
   const [activeStatus, setActiveStatus] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [dnd, setDnd] = useState(false);
 
   // Simulate network load when screen is focused
   useEffect(() => {
-    if (pathname === "/settings") {
-      setLoading(true);
+    if (!hasLoadedSettings) {
       const timer = setTimeout(() => {
         setLoading(false);
+        hasLoadedSettings = true;
       }, 600);
       return () => clearTimeout(timer);
     }
-  }, [pathname]);
+  }, []);
 
   const handleAction = (title: string) => {
     Alert.alert("Settings", `Navigating to ${title} settings...`);
@@ -41,7 +41,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" translucent={false} />
 
       {/* Background Glowing Blobs for Premium Feel */}
       <View className="absolute top-0 left-0 right-0 bottom-0 bg-slate-50/50 z-0 overflow-hidden">

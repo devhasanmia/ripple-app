@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { usePathname } from "expo-router";
 import {
-  SafeAreaView,
   View,
   Text,
   FlatList,
   TextInput,
   TouchableOpacity,
-  Image,
   Alert,
   StatusBar,
 } from "react-native";
+import { Image } from "expo-image";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { ListSkeleton } from "@/components/loading-screen";
 
 interface Contact {
@@ -66,22 +65,23 @@ const MOCK_CONTACTS: Contact[] = [
   },
 ];
 
+let hasLoadedPeople = false;
+
 export default function PeopleScreen() {
-  const pathname = usePathname();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!hasLoadedPeople);
   const [search, setSearch] = useState("");
   const [contacts, setContacts] = useState<Contact[]>(MOCK_CONTACTS);
 
   // Simulate network load when screen is focused
   useEffect(() => {
-    if (pathname === "/people") {
-      setLoading(true);
+    if (!hasLoadedPeople) {
       const timer = setTimeout(() => {
         setLoading(false);
+        hasLoadedPeople = true;
       }, 700);
       return () => clearTimeout(timer);
     }
-  }, [pathname]);
+  }, []);
 
   const handleSearch = (text: string) => {
     setSearch(text);
@@ -101,7 +101,7 @@ export default function PeopleScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50">
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" translucent={false} />
 
       {/* Background Glowing Blobs for Premium Feel */}
       <View className="absolute top-0 left-0 right-0 bottom-0 bg-slate-50/50 z-0 overflow-hidden">
