@@ -1,6 +1,8 @@
 import { ListSkeleton } from "@/components/loading-screen";
 import "@/global.css";
 import { Feather, Ionicons } from "@expo/vector-icons";
+import Constants from "expo-constants";
+import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -14,8 +16,23 @@ import {
   View,
   useColorScheme
 } from "react-native";
-import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// --- Backend URL helper ---
+const getBackendUrls = () => {
+  let host = "localhost";
+  if (Constants.expoConfig?.hostUri) {
+    host = Constants.expoConfig.hostUri.split(':')[0];
+  }
+  return {
+    api: `http://${host}:3000`,
+    ws: `ws://${host}:3000`
+  };
+};
+
+const URLS = getBackendUrls();
+const API_URL = URLS.api;
+const WS_URL = URLS.ws;
 
 // --- Types ---
 interface User {
@@ -50,58 +67,19 @@ const MOCK_USERS: User[] = [
     unreadCount: 2,
     lastMessage: "Hi, David. Hope you're doing....",
     date: "05 Jan",
-  },
-  {
-    id: "jessie-winfield",
-    name: "Jessie Winfield",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#e91e63",
-    lastSeen: "Active 5m ago",
-    unreadCount: 0,
-    lastMessage: "Are you ready for today's part..",
-    date: "04 Jan",
-  },
-  {
-    id: "joseph-harvell",
-    name: "Joseph Harvell",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#03a9f4",
-    lastSeen: "Active 1h ago",
-    unreadCount: 0,
-    lastMessage: "I'm sending you a parcel rece..",
-    date: "03 Jan",
-  },
-  {
-    id: "helen-eberle",
-    name: "Helen Eberle",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#4caf50",
-    lastSeen: "Active 2h ago",
-    unreadCount: 0,
-    lastMessage: "Hope you're doing well today..",
-    date: "31 Dec",
-  },
-  {
-    id: "charles-davis",
-    name: "Charles Davis",
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#ff9800",
-    lastSeen: "Active Yesterday",
-    unreadCount: 0,
-    lastMessage: "Let's get back to the work, You..",
-    date: "25 Dec",
-  },
-  {
-    id: "sean-higdon",
-    name: "Sean Higdon",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#ff5722",
-    lastSeen: "Active 3d ago",
-    unreadCount: 0,
-    lastMessage: "Listen david, i have a problem..",
-    date: "12 Nov",
-  },
+  }
 ];
+
+const DAVID_USER: User = {
+  id: "me",
+  name: "David",
+  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+  ringColor: "#a133b2",
+  lastSeen: "Active Now",
+  unreadCount: 0,
+  lastMessage: "",
+  date: "",
+};
 
 // --- Initial Conversations ---
 const DANIEL_CONVERSATION: ChatMessage[] = [
@@ -192,23 +170,186 @@ function TypingIndicator() {
 
 let hasLoadedHome = false;
 
+const getHeaderDateString = () => {
+  const date = new Date();
+  const weekday = date.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase();
+  const day = date.getDate();
+  const year = date.getFullYear();
+  return `${weekday} ${day}, ${year}`;
+};
+
+const getMessageDate = (item: ChatMessage) => {
+  if (!item.id || item.id.length !== 24) {
+    return new Date();
+  }
+  const sec = parseInt(item.id.substring(0, 8), 16);
+  if (isNaN(sec)) {
+    return new Date();
+  }
+  return new Date(sec * 1000);
+};
+
+const getDayString = (date: Date) => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const getDateSeparatorText = (date: Date) => {
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const dStr = date.toDateString();
+  if (dStr === today.toDateString()) {
+    return "TODAY";
+  } else if (dStr === yesterday.toDateString()) {
+    return "YESTERDAY";
+  } else {
+    const weekday = date.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase();
+    const day = date.getDate();
+    const year = date.getFullYear();
+    return `${weekday} ${day}, ${year}`;
+  }
+};
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const [loading, setLoading] = useState(!hasLoadedHome);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mockUsers, setMockUsers] = useState<User[]>(MOCK_USERS);
+  const [davidUser, setDavidUser] = useState<User>(DAVID_USER);
 
   // Navigation State
   const [activeUser, setActiveUser] = useState<User | null>(null);
 
-  // Custom message histories for different chats
-  const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({
-    "daniel-mercer": DANIEL_CONVERSATION,
+  // Perspectives / Switch States
+  const [currentUser, setCurrentUser] = useState<string>("me"); // "me" (David) or partner ID
+
+  // Drafts mapping: { "me": string, [partnerId]: string }
+  const [draftText, setDraftText] = useState<Record<string, string>>({
+    "me": "",
   });
 
-  const [inputText, setInputText] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  // Online statuses mapping: { "me": boolean, [partnerId]: boolean }
+  const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({
+    "me": true,
+  });
+
+  // Typing status mapping: { [userId]: boolean }
+  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
+
+  // Custom message histories for different chats
+  const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({});
 
   const flatListRef = useRef<FlatList>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const lastTypingState = useRef<Record<string, boolean>>({});
+
+  // Fetch database seeded users on mount
+  useEffect(() => {
+    fetch(`${API_URL}/api/users`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setMockUsers(data);
+        }
+      })
+      .catch((err) => console.error("Error fetching users:", err));
+
+    fetch(`${API_URL}/api/users/me`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.id) {
+          setDavidUser(data);
+        }
+      })
+      .catch((err) => console.error("Error fetching me profile:", err));
+  }, []);
+
+  // WebSocket connection & event synchronization
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let reconnectTimeout: any = null;
+
+    const connectWS = () => {
+      socket = new WebSocket(WS_URL);
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        console.log("Connected to Ripple WebSocket server:", WS_URL);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+
+          if (parsed.type === "NEW_MESSAGE") {
+            const { message } = parsed;
+            const threadId = message.senderId === "me" ? message.partnerId : message.senderId;
+            setConversations((prev) => {
+              const currentList = prev[threadId] || [];
+              if (currentList.some((m) => m.id === message.id)) {
+                return prev;
+              }
+
+              // If there's an optimistic duplicate, replace it instead of appending
+              const optIndex = currentList.findIndex(
+                (m) => m.senderId === message.senderId && m.text === message.text && m.id.includes(".")
+              );
+              if (optIndex !== -1) {
+                const newList = [...currentList];
+                newList[optIndex] = message;
+                return {
+                  ...prev,
+                  [threadId]: newList,
+                };
+              }
+
+              return {
+                ...prev,
+                [threadId]: [...currentList, message],
+              };
+            });
+          } else if (parsed.type === "TYPING_STATUS") {
+            const { senderId, isTyping } = parsed;
+            setTypingStatus((prev) => ({
+              ...prev,
+              [senderId]: isTyping,
+            }));
+          } else if (parsed.type === "ONLINE_STATUS") {
+            const { userId, isOnline } = parsed;
+            setOnlineStatus((prev) => ({
+              ...prev,
+              [userId]: isOnline,
+            }));
+          }
+        } catch (err) {
+          console.error("Error parsing WS message:", err);
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket connection closed. Retrying in 3 seconds...");
+        reconnectTimeout = setTimeout(() => {
+          connectWS();
+        }, 3000);
+      };
+
+      socket.onerror = (error) => {
+        console.warn("WebSocket error:", error);
+      };
+    };
+
+    connectWS();
+
+    return () => {
+      if (socket) {
+        socket.close();
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, []);
 
   // Tab Load Simulation
   useEffect(() => {
@@ -220,6 +361,39 @@ export default function HomeScreen() {
       return () => clearTimeout(timer);
     }
   }, []);
+
+  // Load message history from HTTP server on activeUser change
+  useEffect(() => {
+    if (activeUser) {
+      fetch(`${API_URL}/api/messages/${activeUser.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setConversations((prev) => ({
+            ...prev,
+            [activeUser.id]: data,
+          }));
+        })
+        .catch((err) => console.error("Error fetching messages:", err));
+
+      setDraftText((prev) => ({
+        ...prev,
+        [activeUser.id]: prev[activeUser.id] || "",
+      }));
+      setOnlineStatus((prev) => ({
+        ...prev,
+        [activeUser.id]: prev[activeUser.id] !== undefined ? prev[activeUser.id] : true,
+      }));
+    }
+    // Reset view perspective to David when entering/changing chat
+    setCurrentUser("me");
+  }, [activeUser]);
+
+  const counterpartUser = currentUser === "me" ? activeUser : davidUser;
+  const isCounterpartOnline = counterpartUser ? onlineStatus[counterpartUser.id] : true;
+
+  const showTypingIndicator =
+    counterpartUser &&
+    !!typingStatus[counterpartUser.id];
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -233,115 +407,153 @@ export default function HomeScreen() {
     if (activeUser) {
       scrollToBottom();
     }
-  }, [activeMessages, isTyping, activeUser]);
+  }, [activeMessages, showTypingIndicator, activeUser, currentUser]);
+
+  const sendTypingStatus = (senderId: string, isTyping: boolean) => {
+    if (!activeUser) return;
+    if (lastTypingState.current[senderId] === isTyping) return;
+    lastTypingState.current[senderId] = isTyping;
+
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "TYPING_STATUS",
+          partnerId: senderId === "me" ? activeUser.id : "me",
+          senderId,
+          isTyping,
+        })
+      );
+    }
+  };
+
+  const handleDraftChange = (text: string) => {
+    setDraftText((prev) => ({ ...prev, [currentUser]: text }));
+    const isTyping = text.trim().length > 0;
+    sendTypingStatus(currentUser, isTyping);
+  };
+
+  const toggleOnline = () => {
+    if (!counterpartUser) return;
+    const newStatus = !onlineStatus[counterpartUser.id];
+
+    if (wsRef.current && wsRef.current.readyState === 1) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "ONLINE_STATUS",
+          userId: counterpartUser.id,
+          isOnline: newStatus,
+        })
+      );
+    }
+
+    setOnlineStatus((prev) => ({
+      ...prev,
+      [counterpartUser.id]: newStatus,
+    }));
+  };
 
   const handleSend = () => {
-    if (!activeUser || !inputText.trim()) return;
+    if (!activeUser) return;
+    const textToSend = draftText[currentUser] || "";
+    if (!textToSend.trim()) return;
 
     const timeString = new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
 
-    const newMsg: ChatMessage = {
-      id: Math.random().toString(),
-      senderId: "me",
+    const body = {
+      partnerId: currentUser === "me" ? activeUser.id : "me",
+      senderId: currentUser,
       type: "text",
-      text: inputText.trim(),
+      text: textToSend.trim(),
+      timestamp: timeString,
+    };
+
+    // Optimistically update the UI locally
+    const tempId = Math.random().toString();
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      senderId: currentUser,
+      type: "text",
+      text: textToSend.trim(),
       timestamp: timeString,
     };
 
     setConversations((prev) => ({
       ...prev,
-      [activeUser.id]: [...(prev[activeUser.id] || []), newMsg],
+      [activeUser.id]: [...(prev[activeUser.id] || []), optimisticMsg],
     }));
 
-    setInputText("");
-    simulatePartnerReply(activeUser.id);
+    // Post message to HTTP server
+    fetch(`${API_URL}/api/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((res) => res.json())
+      .then((savedMsg) => {
+        setConversations((prev) => {
+          const list = prev[activeUser.id] || [];
+          // If already merged by the WS socket, just remove the temp message
+          if (list.some((m) => m.id === savedMsg.id)) {
+            return {
+              ...prev,
+              [activeUser.id]: list.filter((m) => m.id !== tempId),
+            };
+          }
+          return {
+            ...prev,
+            [activeUser.id]: list.map((m) => (m.id === tempId ? savedMsg : m)),
+          };
+        });
+      })
+      .catch((err) => console.error("Error sending message:", err));
+
+    setDraftText((prev) => ({ ...prev, [currentUser]: "" }));
+    sendTypingStatus(currentUser, false);
   };
 
-  const simulatePartnerReply = (userId: string) => {
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
+  const renderMessageItem = ({ item, index }: { item: ChatMessage; index: number }) => {
+    const isSent = item.senderId === currentUser;
+    const sender = item.senderId === "me" ? davidUser : activeUser;
+    const isSenderOnline = sender ? (onlineStatus[sender.id] !== undefined ? onlineStatus[sender.id] : true) : true;
+    const statusDotColor = isSenderOnline ? "#10b981" : "#94a3b8";
 
-      const replies = [
-        "Sounds good! Let's make it happen.",
-        "That's awesome!",
-        "Alright, let me review it.",
-        "Sure, no problem at all!",
-      ];
-      const randomReply = replies[Math.floor(Math.random() * replies.length)];
-      const timeString = new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+    // Show avatar if received, and it's the last message of a consecutive block from the sender
+    const isLastInBlock = index === activeMessages.length - 1 || activeMessages[index + 1]?.senderId !== item.senderId;
+    const showAvatar = !isSent && (item.showAvatar !== false && isLastInBlock);
 
-      setConversations((prev) => ({
-        ...prev,
-        [userId]: [
-          ...(prev[userId] || []),
-          {
-            id: Math.random().toString(),
-            senderId: userId,
-            type: "text",
-            text: randomReply,
-            timestamp: timeString,
-            showAvatar: true,
-          },
-        ],
-      }));
-    }, 2000);
-  };
+    const itemDate = getMessageDate(item);
+    const prevItem = index > 0 ? activeMessages[index - 1] : null;
+    const showDateDivider = !prevItem || getDayString(getMessageDate(prevItem)) !== getDayString(itemDate);
 
-  const renderMessageItem = ({ item }: { item: ChatMessage }) => {
-    const isSent = item.senderId === "me";
-
+    let messageBubble;
     if (item.type === "voice") {
       if (isSent) {
-        return (
+        messageBubble = (
           <View className="flex-row justify-end mb-4">
-            <View
-              style={{ borderTopRightRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }}
-              className="flex-row items-center bg-[#f4e5f6] rounded-2xl"
-            >
+            <View style={{ borderTopRightRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }} className="flex-row items-center bg-[#f4e5f6] rounded-2xl">
               <Waveform type={item.waveformType || 1} color="#a133b2" />
-              <TouchableOpacity
-                activeOpacity={0.7}
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: "#ffffff",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginLeft: 10,
-                }}
-              >
+              <TouchableOpacity activeOpacity={0.7} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", marginLeft: 10 }}>
                 <Ionicons name="play" size={12} color="#a133b2" style={{ marginLeft: 2 }} />
               </TouchableOpacity>
             </View>
           </View>
         );
       } else {
-        return (
+        messageBubble = (
           <View className="flex-row justify-start mb-4 items-end">
-            <View style={{ width: 32, height: 32, marginRight: 8 }} />
-            <View
-              style={{ borderTopLeftRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }}
-              className="flex-row items-center bg-[#f0f0f3] dark:bg-slate-800 rounded-2xl"
-            >
-              <View
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: "#ffffff",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginRight: 10,
-                }}
-              >
+            <View style={{ width: 32, height: 32, marginRight: 8, position: "relative" }}>
+              {showAvatar && sender ? (
+                <>
+                  <Image source={{ uri: sender.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                  <View style={{ position: "absolute", top: -1, right: -1, width: 10, height: 10, borderRadius: 5, backgroundColor: statusDotColor, borderWidth: 1.5, borderColor: "#ffffff" }} />
+                </>
+              ) : null}
+            </View>
+            <View style={{ borderTopLeftRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }} className="flex-row items-center bg-[#f0f0f3] dark:bg-slate-800 rounded-2xl">
+              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", marginRight: 10 }}>
                 <Text style={{ fontSize: 18, fontWeight: "bold", color: "#1e293b", marginTop: 4 }}>"</Text>
               </View>
               <Waveform type={item.waveformType || 2} color="#1e293b" />
@@ -349,53 +561,51 @@ export default function HomeScreen() {
           </View>
         );
       }
+    } else {
+      messageBubble = (
+        <View className={`flex-row mb-4 items-end ${isSent ? "justify-end" : "justify-start"}`}>
+          {!isSent && (
+            <View style={{ width: 32, height: 32, marginRight: 8, position: "relative" }}>
+              {showAvatar && sender ? (
+                <>
+                  <Image source={{ uri: sender.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                  <View style={{ position: "absolute", top: -1, right: -1, width: 10, height: 10, borderRadius: 5, backgroundColor: statusDotColor, borderWidth: 1.5, borderColor: "#ffffff" }} />
+                </>
+              ) : null}
+            </View>
+          )}
+
+          <View
+            style={isSent ? { borderTopRightRadius: 0, paddingHorizontal: 18, paddingVertical: 10 } : { borderTopLeftRadius: 0, paddingHorizontal: 18, paddingVertical: 10 }}
+            className={`max-w-[75%] rounded-2xl ${isSent ? "bg-[#f4e5f6]" : "bg-[#f0f0f3] dark:bg-slate-800"
+              }`}
+          >
+            <Text
+              className={`text-[15px] leading-5 ${isSent ? "text-[#a133b2] font-semibold" : "text-slate-800 dark:text-slate-100"
+                }`}
+            >
+              {item.text}
+            </Text>
+          </View>
+        </View>
+      );
     }
 
     return (
-      <View className={`flex-row mb-4 items-end ${isSent ? "justify-end" : "justify-start"}`}>
-        {!isSent && (
-          <View style={{ width: 32, height: 32, marginRight: 8, position: "relative" }}>
-            {item.showAvatar && activeUser ? (
-              <>
-                <Image
-                  source={{ uri: activeUser.avatar }}
-                  style={{ width: 32, height: 32, borderRadius: 16 }}
-                />
-                <View
-                  style={{
-                    position: "absolute",
-                    top: -1,
-                    right: -1,
-                    width: 10,
-                    height: 10,
-                    borderRadius: 5,
-                    backgroundColor: "#a133b2",
-                    borderWidth: 1.5,
-                    borderColor: "#ffffff",
-                  }}
-                />
-              </>
-            ) : null}
+      <View key={item.id}>
+        {showDateDivider && (
+          <View className="items-center justify-center my-4">
+            <Text className="text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
+              {getDateSeparatorText(itemDate)}
+            </Text>
           </View>
         )}
-
-        <View
-          style={isSent ? { borderTopRightRadius: 0, paddingHorizontal: 18, paddingVertical: 10 } : { borderTopLeftRadius: 0, paddingHorizontal: 18, paddingVertical: 10 }}
-          className={`max-w-[75%] rounded-2xl ${isSent ? "bg-[#f4e5f6]" : "bg-[#f0f0f3] dark:bg-slate-800"
-            }`}
-        >
-          <Text
-            className={`text-[15px] leading-5 ${isSent ? "text-[#a133b2] font-semibold" : "text-slate-800 dark:text-slate-100"
-              }`}
-          >
-            {item.text}
-          </Text>
-        </View>
+        {messageBubble}
       </View>
     );
   };
 
-  const filteredUsers = MOCK_USERS.filter((user) =>
+  const filteredUsers = mockUsers.filter((user) =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -406,7 +616,7 @@ export default function HomeScreen() {
   const topPaddingOffset = Platform.OS === "web" ? 64 : 0;
 
   // --- SUB-SCREEN: CHAT ROOM SCREEN (If activeUser is selected) ---
-  if (activeUser) {
+  if (activeUser && counterpartUser) {
     return (
       <View style={{ flex: 1, backgroundColor: "#ffffff", paddingTop: topPaddingOffset }}>
         <StatusBar
@@ -426,6 +636,7 @@ export default function HomeScreen() {
               borderBottomWidth: 1,
               borderBottomColor: "#f1f5f9",
             }}
+            className="dark:bg-slate-900 dark:border-slate-850"
           >
             <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
               {/* Back Button */}
@@ -435,10 +646,7 @@ export default function HomeScreen() {
 
               {/* Avatar with status dot */}
               <View style={{ position: "relative", marginRight: 16 }}>
-                <Image
-                  source={{ uri: activeUser.avatar }}
-                  style={{ width: 40, height: 40, borderRadius: 20 }}
-                />
+                <Image source={{ uri: counterpartUser.avatar }} style={{ width: 40, height: 40, borderRadius: 20 }} />
                 <View
                   style={{
                     position: "absolute",
@@ -446,7 +654,7 @@ export default function HomeScreen() {
                     bottom: 0,
                     width: 12,
                     height: 12,
-                    backgroundColor: "#10b981",
+                    backgroundColor: isCounterpartOnline ? "#10b981" : "#94a3b8",
                     borderWidth: 2,
                     borderColor: "#ffffff",
                     borderRadius: 6,
@@ -455,25 +663,86 @@ export default function HomeScreen() {
               </View>
 
               {/* Title & Status */}
-              <View>
-                <Text className="text-base font-bold text-slate-800 dark:text-slate-100 font-sans">
-                  {activeUser.name}
-                </Text>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text className="text-base font-bold text-slate-800 dark:text-slate-100 font-sans">{counterpartUser.name}</Text>
+
+                  {/* Status Toggle Switch */}
+                  <TouchableOpacity
+                    onPress={toggleOnline}
+                    className={`px-2 py-0.5 rounded-full border ${isCounterpartOnline
+                      ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800/40"
+                      : "bg-slate-50 border-slate-200 dark:bg-slate-800/40 dark:border-slate-700/40"
+                      }`}
+                  >
+                    <Text className={`text-[9px] font-extrabold ${isCounterpartOnline ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}`}>
+                      {isCounterpartOnline ? "ONLINE" : "OFFLINE"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 <View className="flex-row items-center mt-0.5">
-                  <Text className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Active Now
-                  </Text>
-                  <View
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: "#a133b2",
-                      marginLeft: 6,
-                    }}
-                  />
+                  <Text className="text-xs text-slate-400 dark:text-slate-500 font-medium">{isCounterpartOnline ? "Active Now" : "Offline"}</Text>
+                  {isCounterpartOnline && (
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#a133b2", marginLeft: 6 }} />
+                  )}
                 </View>
               </View>
+            </View>
+
+            {/* Custom Sender Toggle Switch */}
+            <View style={{ alignItems: "center", gap: 3 }}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  const nextUser = currentUser === "me" ? activeUser.id : "me";
+                  setCurrentUser(nextUser);
+                }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: colorScheme === "dark" ? "#334155" : "#e2e8f0",
+                  borderRadius: 18,
+                  padding: 2,
+                  position: "relative",
+                  width: 68,
+                  height: 32,
+                }}
+              >
+                {/* Active Indicator Slider */}
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 2,
+                    left: currentUser === "me" ? 2 : 38,
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: "#ffffff",
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 1,
+                    elevation: 1,
+                  }}
+                />
+                {/* David Avatar */}
+                <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", zIndex: 1, opacity: currentUser === "me" ? 1 : 0.4 }}>
+                  <Image
+                    source={{ uri: davidUser.avatar }}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </View>
+                {/* Active Counterpart Avatar */}
+                <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", zIndex: 1, opacity: currentUser === activeUser.id ? 1 : 0.4 }}>
+                  <Image
+                    source={{ uri: activeUser.avatar }}
+                    style={{ width: 22, height: 22, borderRadius: 11 }}
+                  />
+                </View>
+              </TouchableOpacity>
+              <Text className="text-[8px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Selected User: {currentUser === "me" ? "David" : activeUser.name.split(" ")[0]}
+              </Text>
             </View>
           </View>
 
@@ -484,60 +753,40 @@ export default function HomeScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderMessageItem}
             contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
-            className="flex-1"
-            ListHeaderComponent={
-              <View className="items-center justify-center my-4">
-                <Text className="text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
-                  THURSDAY 24, 2022
-                </Text>
-              </View>
-            }
+            className="flex-1 bg-white dark:bg-slate-950"
+            ListHeaderComponent={null}
             ListFooterComponent={
-              isTyping ? (
-                <View className="flex-row items-center mb-2">
+              showTypingIndicator ? (
+                <View className="px-4 mb-4">
+                  <View className="flex-row items-center mb-1 ml-11">
+                    <Text className="text-[11px] font-bold text-slate-400 italic">
+                      {counterpartUser.name} is typing
+                    </Text>
+                  </View>
                   <TypingIndicator />
                 </View>
               ) : null
             }
           />
-
-          {/* Input Bar */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 95 : 0}
-          >
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 95 : 0}>
             <View className="flex-row items-center px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
-              <View
-                style={{
-                  flex: 1,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: "#f5f5f7",
-                  borderRadius: 22,
-                  paddingHorizontal: 16,
-                  height: 44,
-                }}
-              >
+              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#f5f5f7", borderRadius: 22, paddingHorizontal: 16, height: 44 }} className="dark:bg-slate-800">
                 <TextInput
-                  value={inputText}
-                  onChangeText={setInputText}
+                  value={draftText[currentUser] || ""}
+                  onChangeText={handleDraftChange}
                   onSubmitEditing={handleSend}
-                  placeholder="Send Message"
+                  placeholder={`Send as ${currentUser === "me" ? "David" : activeUser.name.split(" ")[0]}...`}
                   placeholderTextColor="#94a3b8"
-                  style={{
-                    flex: 1,
-                    color: "#1e293b",
-                    fontSize: 15,
-                    paddingVertical: 8,
-                  }}
+                  style={{ flex: 1, color: "#1e293b", fontSize: 15, paddingVertical: 8 }}
+                  className="dark:text-slate-100"
                 />
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={handleSend}
-                  disabled={!inputText.trim()}
+                  disabled={!(draftText[currentUser] || "").trim()}
                   style={{ padding: 4 }}
                 >
-                  <Feather name="send" size={18} color={inputText.trim() ? "#a133b2" : "#94a3b8"} />
+                  <Feather name="send" size={18} color={(draftText[currentUser] || "").trim() ? "#a133b2" : "#94a3b8"} />
                 </TouchableOpacity>
               </View>
             </View>
