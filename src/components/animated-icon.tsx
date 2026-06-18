@@ -1,46 +1,54 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+import Animated, {
+  Easing,
+  Keyframe,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
 export function AnimatedSplashOverlay() {
   const [visible, setVisible] = useState(true);
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    // Let the beautiful logo animation run, then start fading out
+    const timer = setTimeout(() => {
+      opacity.value = withTiming(0, { duration: 500 }, (finished) => {
+        if (finished) {
+          runOnJS(setVisible)(false);
+        }
+      });
+    }, 2200);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
 
   if (!visible) return null;
 
-  const splashKeyframe = new Keyframe({
-    0: {
-      transform: [{ scale: INITIAL_SCALE_FACTOR }],
-      opacity: 1,
-    },
-    20: {
-      opacity: 1,
-    },
-    70: {
-      opacity: 0,
-      easing: Easing.elastic(0.7),
-    },
-    100: {
-      opacity: 0,
-      transform: [{ scale: 1 }],
-      easing: Easing.elastic(0.7),
-    },
-  });
-
   return (
     <Animated.View
-      entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
-        'worklet';
-        if (finished) {
-          scheduleOnRN(setVisible, false);
-        }
-      })}
-      style={styles.backgroundSolidColor}
-    />
+      style={[
+        styles.backgroundSolidColor,
+        animatedStyle,
+        {
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+      ]}
+    >
+      <AnimatedIcon />
+    </Animated.View>
   );
 }
 
