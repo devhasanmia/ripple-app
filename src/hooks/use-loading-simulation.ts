@@ -1,6 +1,4 @@
-import { useState, useEffect } from "react";
-
-// Global cache of loaded keys to prevent re-triggering simulation on back/forth navigation
+import { useEffect, useState } from "react";
 const loadedKeys: Record<string, boolean> = {};
 
 export function useLoadingSimulation(key: string, delay: number = 700) {

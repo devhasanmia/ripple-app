@@ -1,16 +1,2 @@
-import Constants from "expo-constants";
-
-const getBackendUrls = () => {
-  let host = "localhost";
-  if (Constants.expoConfig?.hostUri) {
-    host = Constants.expoConfig.hostUri.split(':')[0];
-  }
-  return {
-    api: `http://${host}:3000`,
-    ws: `ws://${host}:3000`
-  };
-};
-
-export const URLS = getBackendUrls();
-export const API_URL = URLS.api;
-export const WS_URL = URLS.ws;
+export const API_URL = "https://ripple-server-7w1t.onrender.com";
+export const WS_URL = "wss://ripple-server-7w1t.onrender.com";

@@ -9,7 +9,8 @@ import {
   TextInput,
   Platform,
   ColorSchemeName,
-  Keyboard
+  Keyboard,
+  ActivityIndicator
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -51,6 +52,7 @@ interface ChatRoomProps {
   handlePickChatImage: () => void;
   showEmojiTray: boolean;
   setShowEmojiTray: (show: boolean) => void;
+  messagesLoading?: boolean;
 }
 
 export function ChatRoom({
@@ -78,10 +80,24 @@ export function ChatRoom({
   handlePickChatImage,
   showEmojiTray,
   setShowEmojiTray,
+  messagesLoading = false,
 }: ChatRoomProps) {
   const isDark = colorScheme === "dark";
   const activeSenderId = currentMode === "real" && loggedInUser ? loggedInUser.id : currentUser;
   const inputRef = React.useRef<TextInput>(null);
+
+  const [visibleCount, setVisibleCount] = React.useState(15);
+
+  React.useEffect(() => {
+    setVisibleCount(15);
+  }, [activeUser.id]);
+
+  const slicedMessages = activeMessages.slice(-visibleCount);
+  const hasMore = activeMessages.length > visibleCount;
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => prev + 15);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? "#020617" : "#ffffff", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
@@ -220,28 +236,46 @@ export function ChatRoom({
           keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
         >
           {/* Messages Stream */}
-          <FlatList
-            ref={flatListRef}
-            data={activeMessages}
-            keyExtractor={(item) => item.id}
-            renderItem={renderMessageItem}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
-            className="flex-1 bg-white dark:bg-slate-950"
-            ListHeaderComponent={null}
-            ListFooterComponent={
-              showTypingIndicator ? (
-                <View className="px-4 mb-4">
-                  <View className="flex-row items-center mb-1 ml-11">
-                    <Text className="text-[11px] font-bold text-slate-400 italic">
-                      {counterpartUser.name} is typing
+          {messagesLoading ? (
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }} className="bg-white dark:bg-slate-950">
+              <ActivityIndicator size="large" color="#a133b2" />
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={slicedMessages}
+              keyExtractor={(item) => item.id}
+              renderItem={renderMessageItem}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
+              className="flex-1 bg-white dark:bg-slate-950"
+              ListHeaderComponent={
+                hasMore ? (
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={handleLoadMore}
+                    className="py-3 items-center justify-center bg-slate-50 dark:bg-slate-900 rounded-xl mb-4 border border-slate-100 dark:border-slate-800"
+                  >
+                    <Text className="text-xs font-extrabold text-[#a133b2] dark:text-purple-300">
+                      See More
                     </Text>
+                  </TouchableOpacity>
+                ) : null
+              }
+              ListFooterComponent={
+                showTypingIndicator ? (
+                  <View className="px-4 mb-4">
+                    <View className="flex-row items-center mb-1 ml-11">
+                      <Text className="text-[11px] font-bold text-slate-400 italic">
+                        {counterpartUser.name} is typing
+                      </Text>
+                    </View>
+                    <TypingIndicator />
                   </View>
-                  <TypingIndicator />
-                </View>
-              ) : null
-            }
-          />
+                ) : null
+              }
+            />
+          )}
           <View className="flex-col bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
             <View className="flex-row items-center px-4 py-3">
               {/* Image Picker Button */}

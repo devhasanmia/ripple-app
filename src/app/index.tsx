@@ -7,19 +7,17 @@ import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  BackHandler,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
+  Modal,
   Platform,
-  StatusBar,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
-  Modal
+  useColorScheme
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Waveform } from "@/components/waveform";
 import { API_URL, WS_URL } from "@/constants/config";
@@ -27,113 +25,21 @@ import { ChatMessage, ChatRequest, User } from "@/types";
 import {
   getDateSeparatorText,
   getDayString,
-  getMessageDate,
-  timeAgo
+  getMessageDate
 } from "@/utils/date";
 
 import { AuthScreen } from "@/components/auth-screen";
-import { BackgroundBlobs } from "@/components/background-blobs";
 import { ChatRoom } from "@/components/chat-room";
+import { DashboardView } from "@/components/dashboard-view";
 import { WelcomeScreen } from "@/components/welcome-screen";
 
-// --- Mock Users ---
-const MOCK_USERS: User[] = [
-  {
-    id: "daniel-mercer",
-    name: "Daniel Mercer",
-    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#a133b2",
-    lastSeen: "Active Now",
-    unreadCount: 2,
-    lastMessage: "Hi, David. Hope you're doing....",
-    date: "05 Jan",
-  },
-  {
-    id: "sarah-connor",
-    name: "Sarah Connor",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#3b82f6",
-    lastSeen: "Active Now",
-    unreadCount: 0,
-    lastMessage: "Great! Let's catch up tomorrow.",
-    date: "04 Jan",
-  },
-  {
-    id: "james-smith",
-    name: "James Smith",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#10b981",
-    lastSeen: "Active Now",
-    unreadCount: 1,
-    lastMessage: "Hey, can you send that file?",
-    date: "03 Jan",
-  },
-  {
-    id: "emily-watson",
-    name: "Emily Watson",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#f59e0b",
-    lastSeen: "2h ago",
-    unreadCount: 0,
-    lastMessage: "Thanks for the call.",
-    date: "02 Jan",
-  },
-  {
-    id: "alex-mercer",
-    name: "Alex Mercer",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#a133b2",
-    lastSeen: "Active Now",
-    unreadCount: 0,
-    lastMessage: "Check out the new design!",
-    date: "01 Jan",
-  },
-  {
-    id: "sophia-davis",
-    name: "Sophia Davis",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80",
-    ringColor: "#ec4899",
-    lastSeen: "Active Now",
-    unreadCount: 3,
-    lastMessage: "Are you coming tonight?",
-    date: "31 Dec",
-  }
-];
-
-const DAVID_USER: User = {
-  id: "me",
-  name: "David",
-  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
-  ringColor: "#a133b2",
-  lastSeen: "Active Now",
-  unreadCount: 0,
-  lastMessage: "",
-  date: "",
-};
-
-// --- Initial Conversations ---
-const DANIEL_CONVERSATION: ChatMessage[] = [
-  { id: "1", senderId: "daniel-mercer", type: "text", text: "Are you still travelling?", timestamp: "10:10 AM", showAvatar: true },
-  { id: "2", senderId: "me", type: "text", text: "Yes, i'm at Istanbul..", timestamp: "10:12 AM" },
-  { id: "3", senderId: "daniel-mercer", type: "text", text: "OoOo, Thats so Cool!", timestamp: "10:14 AM", showAvatar: false },
-  { id: "4", senderId: "daniel-mercer", type: "text", text: "Raining??", timestamp: "10:14 AM", showAvatar: true },
-  { id: "5", senderId: "me", type: "voice", waveformType: 1, timestamp: "10:15 AM" },
-  { id: "6", senderId: "daniel-mercer", type: "text", text: "Hi, Did you heared?", timestamp: "10:18 AM", showAvatar: false },
-  { id: "7", senderId: "daniel-mercer", type: "voice", waveformType: 2, timestamp: "10:20 AM", showAvatar: false },
-  { id: "8", senderId: "daniel-mercer", type: "text", text: "Ok!", timestamp: "10:21 AM", showAvatar: true },
-  { id: "9", senderId: "me", type: "voice", waveformType: 3, timestamp: "10:22 AM" },
-];
-
-const SARAH_CONVERSATION: ChatMessage[] = [
-  { id: "s1", senderId: "sarah-connor", type: "text", text: "Hey David! Are we still meeting?", timestamp: "3:40 PM", showAvatar: true },
-  { id: "s2", senderId: "me", type: "text", text: "Hey Sarah, yes, 4 PM works for me.", timestamp: "3:42 PM" },
-  { id: "s3", senderId: "sarah-connor", type: "text", text: "Great! Let's catch up tomorrow.", timestamp: "3:45 PM", showAvatar: true }
-];
-
-const JAMES_CONVERSATION: ChatMessage[] = [
-  { id: "j1", senderId: "james-smith", type: "text", text: "Hey, can you send that file?", timestamp: "1:15 PM", showAvatar: true },
-  { id: "j2", senderId: "me", type: "text", text: "Sure, let me upload it.", timestamp: "1:20 PM" }
-];
+import {
+  DANIEL_CONVERSATION,
+  DAVID_USER,
+  JAMES_CONVERSATION,
+  MOCK_USERS,
+  SARAH_CONVERSATION
+} from "@/constants/mock-data";
 
 let hasLoadedHome = false;
 
@@ -160,6 +66,8 @@ export default function HomeScreen() {
       };
     }
   }, []);
+
+
 
   const handleLayout = (e: any) => {
     const { height } = e.nativeEvent.layout;
@@ -233,13 +141,73 @@ export default function HomeScreen() {
   const [requestsSubTab, setRequestsSubTab] = useState<"incoming" | "sent">("incoming");
   const [realChats, setRealChats] = useState<User[]>([]);
 
+  // API loading states
+  const [realChatsLoading, setRealChatsLoading] = useState(false);
+  const [exploreLoading, setExploreLoading] = useState(false);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (activeFullscreenImage !== null) {
+        setActiveFullscreenImage(null);
+        return true;
+      }
+      if (activeUser !== null) {
+        setActiveUser(null);
+        setShowEmojiTray(false);
+        return true;
+      }
+      if (currentMode === "auth") {
+        setAuthError("");
+        setCurrentMode(null);
+        return true;
+      }
+      if (currentMode === "demo") {
+        setCurrentMode(null);
+        return true;
+      }
+      if (currentMode === "real") {
+        if (realActiveTab !== "chats") {
+          setRealActiveTab("chats");
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      onBackPress
+    );
+
+    return () => subscription.remove();
+  }, [activeFullscreenImage, activeUser, currentMode, realActiveTab]);
+
+  // Unread message counts mapping: { [userId]: number }
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(() => {
+    const initialCounts: Record<string, number> = {};
+    MOCK_USERS.forEach(user => {
+      initialCounts[user.id] = user.unreadCount || 0;
+    });
+    return initialCounts;
+  });
+
+  // Tracks last message epoch (ms) per userId — used to sort conversations by recency
+  const [lastActivityAt, setLastActivityAt] = useState<Record<string, number>>({});
+  const activeUserRef = useRef<User | null>(null);
+
+  useEffect(() => {
+    activeUserRef.current = activeUser;
+  }, [activeUser]);
+
   // Profile Edit Form State
   const [editName, setEditName] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [editPin, setEditPin] = useState("");
   const [editAvatarUri, setEditAvatarUri] = useState("");
   const [editAvatarBase64, setEditAvatarBase64] = useState("");
-  const [profileMessage, setProfileMessage] = useState({ text: "", type: "" });
+  const [profileMessage, setProfileMessage] = useState<{ text: string; type: "success" | "error" | "" }>({ text: "", type: "" });
   const [profileUpdating, setProfileUpdating] = useState(false);
   const [showPin, setShowPin] = useState(false);
 
@@ -264,7 +232,7 @@ export default function HomeScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: "images",
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.6,
@@ -352,15 +320,6 @@ export default function HomeScreen() {
 
   // Fetch database seeded users on mount
   useEffect(() => {
-    fetch(`${API_URL}/api/users`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setMockUsers(data);
-        }
-      })
-      .catch((err) => console.error("Error fetching users:", err));
-
     fetch(`${API_URL}/api/users/me`)
       .then((res) => res.json())
       .then((data) => {
@@ -375,8 +334,12 @@ export default function HomeScreen() {
   useEffect(() => {
     let socket: WebSocket | null = null;
     let reconnectTimeout: any = null;
+    let isActive = true; // becomes false on cleanup — stops stale reconnects
+    // Deduplicates WS events so double-fire (React StrictMode) never double-increments
+    const processedMsgIds = new Set<string>();
 
     const connectWS = () => {
+      if (!isActive) return;
       socket = new WebSocket(WS_URL);
       wsRef.current = socket;
 
@@ -395,9 +358,27 @@ export default function HomeScreen() {
 
           if (parsed.type === "NEW_MESSAGE") {
             const { message } = parsed;
+
+            // Skip if we already processed this message id (guards against double WS connections)
+            if (processedMsgIds.has(message.id)) return;
+            processedMsgIds.add(message.id);
+
             const currentLogged = loggedInUserRef.current;
             const isReal = currentModeRef.current === "real" && currentLogged;
             const threadId = message.senderId === (isReal ? currentLogged.id : "me") ? message.partnerId : message.senderId;
+
+            // Increment unread count only for messages from the OTHER person while chat is closed
+            const currentActiveUser = activeUserRef.current;
+            if (!currentActiveUser || currentActiveUser.id !== threadId) {
+              const myId = isReal ? currentLogged.id : "me";
+              if (message.senderId !== myId) {
+                setUnreadCounts((prev) => ({
+                  ...prev,
+                  [threadId]: (prev[threadId] || 0) + 1,
+                }));
+              }
+            }
+
             setConversations((prev) => {
               const currentList = prev[threadId] || [];
               if (currentList.some((m) => m.id === message.id)) {
@@ -425,6 +406,9 @@ export default function HomeScreen() {
                 [threadId]: [...currentList, message],
               };
             });
+
+            // Update last-activity timestamp so the chat list re-sorts in real-time
+            setLastActivityAt((prev) => ({ ...prev, [threadId]: Date.now() }));
           } else if (parsed.type === "TYPING_STATUS") {
             const { senderId, isTyping } = parsed;
             setTypingStatus((prev) => ({
@@ -454,9 +438,12 @@ export default function HomeScreen() {
 
       socket.onclose = () => {
         console.log("WebSocket connection closed. Retrying in 3 seconds...");
-        reconnectTimeout = setTimeout(() => {
-          connectWS();
-        }, 3000);
+        // Only reconnect if this effect instance is still active
+        if (isActive) {
+          reconnectTimeout = setTimeout(() => {
+            connectWS();
+          }, 3000);
+        }
       };
 
       socket.onerror = (error) => {
@@ -467,11 +454,13 @@ export default function HomeScreen() {
     connectWS();
 
     return () => {
-      if (socket) {
-        socket.close();
-      }
+      isActive = false; // prevent any pending reconnect from firing
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
+      }
+      if (socket) {
+        socket.onclose = null; // suppress reconnect on intentional close
+        socket.close();
       }
     };
   }, []);
@@ -484,21 +473,32 @@ export default function HomeScreen() {
   }, [loggedInUser]);
 
   const fetchRealChats = (userId: string) => {
+    setRealChatsLoading(true);
     fetch(`${API_URL}/api/users/chats/${userId}`)
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) setRealChats(data);
+        if (Array.isArray(data)) {
+          setRealChats(data);
+          const initialCounts: Record<string, number> = {};
+          data.forEach(user => {
+            initialCounts[user.id] = user.unreadCount || 0;
+          });
+          setUnreadCounts(prev => ({ ...prev, ...initialCounts }));
+        }
       })
-      .catch((err) => console.error("Error fetching chats:", err));
+      .catch((err) => console.error("Error fetching chats:", err))
+      .finally(() => setRealChatsLoading(false));
   };
 
   const fetchExploreUsers = (userId: string) => {
+    setExploreLoading(true);
     fetch(`${API_URL}/api/users/explore/${userId}`)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setExploreUsers(data);
       })
-      .catch((err) => console.error("Error fetching explore users:", err));
+      .catch((err) => console.error("Error fetching explore users:", err))
+      .finally(() => setExploreLoading(false));
   };
 
   const fetchPendingRequests = (userId: string) => {
@@ -526,8 +526,17 @@ export default function HomeScreen() {
       } else if (realActiveTab === "explore") {
         fetchExploreUsers(loggedInUser.id);
       } else if (realActiveTab === "requests") {
-        fetchPendingRequests(loggedInUser.id);
-        fetchSentRequests(loggedInUser.id);
+        setRequestsLoading(true);
+        Promise.all([
+          fetch(`${API_URL}/api/requests/pending/${loggedInUser.id}`).then((res) => res.json()),
+          fetch(`${API_URL}/api/requests/sent/${loggedInUser.id}`).then((res) => res.json())
+        ])
+          .then(([pending, sent]) => {
+            if (Array.isArray(pending)) setPendingRequests(pending);
+            if (Array.isArray(sent)) setSentRequests(sent);
+          })
+          .catch((err) => console.error("Error fetching requests:", err))
+          .finally(() => setRequestsLoading(false));
       }
     }
   }, [currentMode, loggedInUser, realActiveTab]);
@@ -702,6 +711,11 @@ export default function HomeScreen() {
   // Load message history from HTTP server on activeUser change
   useEffect(() => {
     if (activeUser) {
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [activeUser.id]: 0,
+      }));
+      setMessagesLoading(true);
       const currentId = currentMode === "real" && loggedInUser ? loggedInUser.id : "me";
       fetch(`${API_URL}/api/messages/${activeUser.id}?currentUserId=${currentId}`)
         .then((res) => res.json())
@@ -711,7 +725,8 @@ export default function HomeScreen() {
             [activeUser.id]: data,
           }));
         })
-        .catch((err) => console.error("Error fetching messages:", err));
+        .catch((err) => console.error("Error fetching messages:", err))
+        .finally(() => setMessagesLoading(false));
 
       setDraftText((prev) => ({
         ...prev,
@@ -839,6 +854,9 @@ export default function HomeScreen() {
       [activeUser.id]: [...(prev[activeUser.id] || []), optimisticMsg],
     }));
 
+    // Bubble this chat to the top of the home list immediately
+    setLastActivityAt((prev) => ({ ...prev, [activeUser.id]: Date.now() }));
+
     // Post message to HTTP server
     fetch(`${API_URL}/api/messages`, {
       method: "POST",
@@ -910,6 +928,9 @@ export default function HomeScreen() {
       [activeUser.id]: [...(prev[activeUser.id] || []), optimisticMsg],
     }));
 
+    // Bubble this chat to the top of the home list immediately
+    setLastActivityAt((prev) => ({ ...prev, [activeUser.id]: Date.now() }));
+
     if (currentMode === "real") {
       fetch(`${API_URL}/api/messages`, {
         method: "POST",
@@ -973,8 +994,6 @@ export default function HomeScreen() {
     }
   };
 
-
-
   const renderMessageItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const isSent = item.senderId === (currentMode === "real" && loggedInUser ? loggedInUser.id : currentUser);
     const sender = isSent
@@ -983,12 +1002,16 @@ export default function HomeScreen() {
     const isSenderOnline = sender ? (onlineStatus[sender.id] !== undefined ? onlineStatus[sender.id] : true) : true;
     const statusDotColor = isSenderOnline ? "#10b981" : "#94a3b8";
 
+    // Find this message's true index in the full activeMessages array for correct date/avatar logic
+    const trueIndex = activeMessages.findIndex((m) => m.id === item.id);
+
     // Show avatar if received, and it's the last message of a consecutive block from the sender
-    const isLastInBlock = index === activeMessages.length - 1 || activeMessages[index + 1]?.senderId !== item.senderId;
+    const isLastInBlock = trueIndex === activeMessages.length - 1 || activeMessages[trueIndex + 1]?.senderId !== item.senderId;
     const showAvatar = !isSent && (item.showAvatar !== false && isLastInBlock);
 
     const itemDate = getMessageDate(item);
-    const prevItem = index > 0 ? activeMessages[index - 1] : null;
+    const prevItem = trueIndex > 0 ? activeMessages[trueIndex - 1] : null;
+    // Show date divider only when the day changes — so "TODAY" appears at most once per day
     const showDateDivider = !prevItem || getDayString(getMessageDate(prevItem)) !== getDayString(itemDate);
 
     let messageBubble;
@@ -1064,15 +1087,15 @@ export default function HomeScreen() {
               contentFit="cover"
             />
             {item.timestamp ? (
-              <View 
-                style={{ 
-                  position: "absolute", 
-                  bottom: 8, 
-                  right: 8, 
-                  backgroundColor: "rgba(0,0,0,0.55)", 
-                  paddingHorizontal: 6, 
-                  paddingVertical: 2, 
-                  borderRadius: 6 
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 8,
+                  right: 8,
+                  backgroundColor: "rgba(0,0,0,0.55)",
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  borderRadius: 6
                 }}
               >
                 <Text style={{ fontSize: 9, color: "#ffffff", fontWeight: "600" }}>
@@ -1133,17 +1156,12 @@ export default function HomeScreen() {
     );
   };
 
-  const filteredUsers = MOCK_USERS.filter((user) =>
-    user.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   if (loading) {
     return <ListSkeleton />;
   }
 
   const topPaddingOffset = Platform.OS === "web" ? 64 : 0;
 
-  // --- SUB-SCREEN: CHAT ROOM SCREEN (If activeUser is selected) ---
   // --- SUB-SCREEN: CHAT ROOM SCREEN (If activeUser is selected) ---
   if (activeUser && counterpartUser) {
     return (
@@ -1176,6 +1194,7 @@ export default function HomeScreen() {
           handlePickChatImage={handlePickChatImage}
           showEmojiTray={showEmojiTray}
           setShowEmojiTray={setShowEmojiTray}
+          messagesLoading={messagesLoading}
         />
 
         {/* Full-Screen Image Viewer Modal */}
@@ -1268,864 +1287,55 @@ export default function HomeScreen() {
     );
   }
 
-  // ==================== 3. REAL MODE DASHBOARD ====================
-  if (currentMode === "real") {
-    const filteredRealUsers = (realActiveTab === "chats" ? realChats : exploreUsers).filter((user) =>
-      user.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    return (
-      <View style={{ flex: 1, backgroundColor: colorScheme === "dark" ? "#020617" : "#ffffff", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
-        <StatusBar
-          barStyle={colorScheme === "dark" ? "light-content" : "dark-content"}
-          backgroundColor={colorScheme === "dark" ? "#020617" : "#ffffff"}
-          translucent={false}
-        />
-        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
-          <BackgroundBlobs />
-
-          {/* Real Mode Header */}
-          <View className="flex-row items-center justify-between px-5 pt-8 pb-3 bg-transparent">
-            <View className="flex-row items-center gap-3">
-              <Image source={{ uri: loggedInUser?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" }} style={{ width: 38, height: 38, borderRadius: 19 }} />
-              <View>
-                <Text className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{loggedInUser?.name}</Text>
-                <Text className="text-[10px] text-slate-400 font-semibold">@{loggedInUser?.username}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Search Input Container */}
-          {realActiveTab !== "requests" && realActiveTab !== "profile" && (
-            <View className="px-5 mb-5">
-              <View className="flex-row items-center bg-white dark:bg-slate-900 px-4 py-3 rounded-2xl">
-                <Feather name="search" size={18} color="#a133b2" />
-                <TextInput
-                  placeholder="Search conversations..."
-                  placeholderTextColor="#94a3b8"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  className="flex-1 ml-3 text-[14.5px] text-slate-800 dark:text-slate-100 font-semibold py-0.5"
-                />
-                {searchQuery.length > 0 ? (
-                  <TouchableOpacity onPress={() => setSearchQuery("")}>
-                    <Ionicons name="close-circle" size={18} color="#94a3b8" />
-                  </TouchableOpacity>
-                ) : (
-                  <Feather name="mic" size={18} color="#94a3b8" />
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* Main Content Area */}
-          <View className="flex-1 px-5 mt-2">
-            {realActiveTab === "chats" && (
-              filteredRealUsers.length === 0 ? (
-                <View className="flex-1 justify-center items-center px-4">
-                  <Ionicons name="chatbubbles-outline" size={48} color="#94a3b8" />
-                  <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mt-4 text-center leading-5">
-                    No active chats yet.{"\n"}Go to the Explore tab to find users and start chatting!
-                  </Text>
-                </View>
-              ) : (
-                <View className="flex-1">
-                  {/* Active Teammates Tray */}
-                  <View className="mb-6">
-                    <View className="flex-row items-center justify-between mb-3">
-                      <Text className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                        Active Teammates
-                      </Text>
-                      <View className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    </View>
-                    <FlatList
-                      horizontal
-                      data={[
-                        // Inject the logged-in user at the beginning as "My Status"
-                        {
-                          id: "me-status",
-                          name: "My Note",
-                          avatar: loggedInUser?.avatar || davidUser.avatar,
-                          isMe: true,
-                        },
-                        ...realChats.filter(u => onlineStatus[u.id])
-                      ]}
-                      keyExtractor={(item) => `active-${item.id}`}
-                      showsHorizontalScrollIndicator={false}
-                      renderItem={({ item }) => {
-                        if (item.isMe) {
-                          return (
-                            <TouchableOpacity
-                              activeOpacity={0.85}
-                              className="items-center mr-5"
-                            >
-                              <View className="relative">
-                                <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-                                <View className="absolute bottom-0 right-0 bg-[#a133b2] w-5 h-5 rounded-full justify-center items-center border-2 border-slate-50 dark:border-slate-950">
-                                  <Feather name="plus" size={12} color="#ffffff" />
-                                </View>
-                              </View>
-                              <Text className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mt-2 text-center">
-                                My Note
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        }
-
-                        return (
-                          <TouchableOpacity
-                            activeOpacity={0.85}
-                            onPress={() => setActiveUser(item as User)}
-                            className="items-center mr-5"
-                          >
-                            <View className="relative">
-                              <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-                              <View className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-500 border-2 border-slate-50 dark:border-slate-950" />
-                            </View>
-                            <Text className="text-[11px] font-semibold text-slate-700 dark:text-slate-350 mt-2 text-center max-w-[60px]" numberOfLines={1}>
-                              {item.name.split(" ")[0]}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      }}
-                    />
-                  </View>
-
-                  <FlatList
-                    data={filteredRealUsers}
-                    keyExtractor={(item) => item.id}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 120 }}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        onPress={() => setActiveUser(item)}
-                        className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3"
-                      >
-                        <View className="relative mr-3.5">
-                          <Image source={{ uri: item.avatar }} style={{ width: 46, height: 46, borderRadius: 23 }} />
-                          {onlineStatus[item.id] && (
-                            <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-1.5 border-white dark:border-slate-900" />
-                          )}
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-[14.5px] font-bold text-slate-800 dark:text-slate-100">{item.name}</Text>
-                          <Text numberOfLines={1} className="text-xs text-slate-400 mt-0.5">@{item.username}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                      </TouchableOpacity>
-                    )}
-                  />
-                </View>
-              )
-            )}
-
-            {realActiveTab === "explore" && (
-              filteredRealUsers.length === 0 ? (
-                <View className="flex-1 justify-center items-center px-4">
-                  <Ionicons name="compass-outline" size={48} color="#94a3b8" />
-                  <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mt-4 text-center">
-                    No new users to explore right now.
-                  </Text>
-                </View>
-              ) : (
-                <FlatList
-                  data={filteredRealUsers}
-                  keyExtractor={(item) => item.id}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 120 }}
-                  renderItem={({ item }) => (
-                    <View className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3">
-                      <View className="relative mr-3.5">
-                        <Image source={{ uri: item.avatar }} style={{ width: 46, height: 46, borderRadius: 23 }} />
-                        {onlineStatus[item.id] && (
-                          <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-1.5 border-white dark:border-slate-900" />
-                        )}
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-[14.5px] font-bold text-slate-800 dark:text-slate-100">{item.name}</Text>
-                        <Text className="text-xs text-slate-400 mt-0.5">@{item.username}</Text>
-                      </View>
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => handleSendRequest(item.id)}
-                        className="bg-purple-100 dark:bg-purple-950 px-4 py-2 rounded-full"
-                      >
-                        <Text className="text-xs font-bold text-[#a133b2] dark:text-purple-300">Request</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                />
-              )
-            )}
-
-            {realActiveTab === "requests" && (
-              <View className="flex-1">
-                {/* Segmented Selector (Borderless & Shadowless) */}
-                <View className="flex-row bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                  <TouchableOpacity
-                    onPress={() => setRequestsSubTab("incoming")}
-                    className={`flex-1 py-2 rounded-lg items-center ${requestsSubTab === "incoming" ? "bg-white dark:bg-slate-900" : ""}`}
-                  >
-                    <Text className={`text-xs font-extrabold ${requestsSubTab === "incoming" ? "text-[#a133b2]" : "text-slate-500"}`}>
-                      Incoming ({pendingRequests.length})
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => setRequestsSubTab("sent")}
-                    className={`flex-1 py-2 rounded-lg items-center ${requestsSubTab === "sent" ? "bg-white dark:bg-slate-900" : ""}`}
-                  >
-                    <Text className={`text-xs font-extrabold ${requestsSubTab === "sent" ? "text-[#a133b2]" : "text-slate-500"}`}>
-                      Sent ({sentRequests.length})
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {requestsSubTab === "incoming" ? (
-                  pendingRequests.length === 0 ? (
-                    <View className="flex-1 justify-center items-center px-4">
-                      <Ionicons name="people-outline" size={48} color="#94a3b8" />
-                      <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mt-4 text-center">
-                        No pending chat requests.
-                      </Text>
-                    </View>
-                  ) : (
-                    <FlatList
-                      data={pendingRequests}
-                      keyExtractor={(item) => item.id}
-                      showsVerticalScrollIndicator={false}
-                      contentContainerStyle={{ paddingBottom: 120 }}
-                      renderItem={({ item }) => (
-                        <View className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3">
-                          <Image source={{ uri: item.senderAvatar }} style={{ width: 46, height: 46, borderRadius: 23, marginRight: 14 }} />
-                          <View className="flex-1">
-                            <Text className="text-[14.5px] font-bold text-slate-800 dark:text-slate-100">{item.senderName}</Text>
-                            {item.status === "accepted" ? (
-                              <View className="flex-row items-center gap-1.5 mt-0.5">
-                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#10b981" }} />
-                                <Text className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                                  Connected · {timeAgo(item.updatedAt)}
-                                </Text>
-                              </View>
-                            ) : (
-                              <Text className="text-xs text-slate-400 mt-0.5">wants to connect</Text>
-                            )}
-                          </View>
-                          {item.status === "pending" && (
-                            <View className="flex-row gap-2">
-                              <TouchableOpacity
-                                activeOpacity={0.8}
-                                onPress={() => handleRequestResponse(item.id, "accepted")}
-                                className="bg-emerald-100 dark:bg-emerald-950 px-3.5 py-1.5 rounded-full"
-                              >
-                                <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Accept</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                activeOpacity={0.8}
-                                onPress={() => handleRequestResponse(item.id, "declined")}
-                                className="bg-red-100 dark:bg-red-950 px-3.5 py-1.5 rounded-full"
-                              >
-                                <Text className="text-xs font-bold text-red-500 dark:text-red-400">Decline</Text>
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                          {item.status === "accepted" && (
-                            <View className="bg-emerald-100 dark:bg-emerald-950 px-3.5 py-1.5 rounded-full">
-                              <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Connected</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    />
-                  )
-                ) : (
-                  sentRequests.length === 0 ? (
-                    <View className="flex-1 justify-center items-center px-4">
-                      <Ionicons name="paper-plane-outline" size={48} color="#94a3b8" />
-                      <Text className="text-sm font-semibold text-slate-500 dark:text-slate-400 mt-4 text-center">
-                        No requests sent yet.
-                      </Text>
-                    </View>
-                  ) : (
-                    <FlatList
-                      data={sentRequests}
-                      keyExtractor={(item) => item.id}
-                      showsVerticalScrollIndicator={false}
-                      contentContainerStyle={{ paddingBottom: 120 }}
-                      renderItem={({ item }) => {
-                        const isCancelled = item.status === "cancelled";
-                        const isAccepted = item.status === "accepted";
-                        return (
-                          <View
-                            className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3"
-                            style={isCancelled ? { opacity: 0.65 } : undefined}
-                          >
-                            <View style={{ position: "relative", marginRight: 14 }}>
-                              <Image source={{ uri: item.receiverAvatar }} style={{ width: 46, height: 46, borderRadius: 23 }} />
-                              {isCancelled && (
-                                <View style={{
-                                  position: "absolute", top: -2, right: -2,
-                                  width: 16, height: 16, borderRadius: 8,
-                                  backgroundColor: "#94a3b8",
-                                  alignItems: "center", justifyContent: "center",
-                                  borderWidth: 1.5, borderColor: "#ffffff",
-                                }}>
-                                  <Ionicons name="close" size={9} color="#fff" />
-                                </View>
-                              )}
-                            </View>
-                            <View className="flex-1">
-                              <Text className="text-[14.5px] font-bold text-slate-800 dark:text-slate-100">{item.receiverName}</Text>
-                              {isAccepted ? (
-                                <View className="flex-row items-center gap-1.5 mt-0.5">
-                                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#10b981" }} />
-                                  <Text className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                                    Accepted · {timeAgo(item.updatedAt)}
-                                  </Text>
-                                </View>
-                              ) : isCancelled ? (
-                                <Text className="text-xs text-slate-400 mt-0.5">Cancelled · {timeAgo(item.updatedAt)}</Text>
-                              ) : (
-                                <Text className="text-xs text-slate-400 mt-0.5">Pending approval</Text>
-                              )}
-                            </View>
-                            {item.status === "pending" && (
-                              <TouchableOpacity
-                                activeOpacity={0.8}
-                                onPress={() => handleCancelRequest(item.id)}
-                                className="bg-red-100 dark:bg-red-950 px-3.5 py-1.5 rounded-full"
-                              >
-                                <Text className="text-xs font-bold text-red-500 dark:text-red-400">Cancel</Text>
-                              </TouchableOpacity>
-                            )}
-                            {isCancelled && (
-                              <TouchableOpacity
-                                activeOpacity={0.8}
-                                onPress={() => handleResendRequest(item.id)}
-                                className="bg-purple-100 dark:bg-purple-950 px-3.5 py-1.5 rounded-full flex-row items-center gap-1"
-                              >
-                                <Ionicons name="refresh" size={11} color="#a133b2" />
-                                <Text className="text-xs font-extrabold text-[#a133b2] dark:text-purple-300">Re-send</Text>
-                              </TouchableOpacity>
-                            )}
-                            {isAccepted && (
-                              <View className="bg-emerald-100 dark:bg-emerald-950 px-3.5 py-1.5 rounded-full">
-                                <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Connected</Text>
-                              </View>
-                            )}
-                          </View>
-                        );
-                      }}
-                    />
-                  )
-                )}
-              </View>
-            )}
-
-            {realActiveTab === "profile" && (
-              <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
-                style={{ flex: 1, paddingBottom: Platform.OS === "android" ? androidKeyboardPadding : 0 }}
-                keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 0}
-              >
-                <FlatList
-                  data={[{ id: "profile-form" }]}
-                  keyExtractor={(item) => item.id}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 120 }}
-                  renderItem={() => (
-                    <View className="gap-6 mt-2">
-                      {/* Centered Avatar Edit */}
-                      <View className="items-center">
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          onPress={handlePickAvatar}
-                          style={{ position: "relative" }}
-                        >
-                          <View
-                            style={{
-                              width: 110,
-                              height: 110,
-                              borderRadius: 55,
-                              borderWidth: 3,
-                              borderColor: "#a133b2",
-                              padding: 3,
-                              backgroundColor: "#f8fafc",
-                              shadowColor: "#000",
-                              shadowOffset: { width: 0, height: 2 },
-                              shadowOpacity: 0.1,
-                              shadowRadius: 3,
-                              elevation: 3,
-                            }}
-                            className="dark:bg-slate-900 justify-center items-center"
-                          >
-                            <Image
-                              source={{ uri: editAvatarUri || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" }}
-                              style={{ width: "100%", height: "100%", borderRadius: 50 }}
-                            />
-                          </View>
-                          <View
-                            style={{
-                              position: "absolute",
-                              bottom: 0,
-                              right: 0,
-                              backgroundColor: "#a133b2",
-                              width: 32,
-                              height: 32,
-                              borderRadius: 16,
-                              justifyContent: "center",
-                              alignItems: "center",
-                              borderWidth: 2,
-                              borderColor: "#ffffff",
-                              shadowColor: "#000",
-                              shadowOffset: { width: 0, height: 1 },
-                              shadowOpacity: 0.15,
-                              shadowRadius: 1.5,
-                              elevation: 2,
-                            }}
-                          >
-                            <Feather name="camera" size={14} color="#ffffff" />
-                          </View>
-                        </TouchableOpacity>
-                        <Text className="text-xs text-slate-400 dark:text-slate-500 font-bold mt-3">
-                          Tap photo to change
-                        </Text>
-                      </View>
-
-                      {/* Status Message */}
-                      {profileMessage.text ? (
-                        <View
-                          className={`p-3.5 rounded-xl border items-center ${profileMessage.type === "success"
-                            ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-955 dark:border-emerald-900"
-                            : "bg-red-50 border-red-200 dark:bg-red-955 dark:border-red-900"
-                            }`}
-                        >
-                          <Text
-                            className={`text-xs font-bold text-center ${profileMessage.type === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"
-                              }`}
-                          >
-                            {profileMessage.text}
-                          </Text>
-                        </View>
-                      ) : null}
-
-                      {/* Form Fields Container */}
-                      <View className="bg-[#f8fafc] dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 gap-4" style={{ shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}>
-                        {/* Name field */}
-                        <View className="gap-1.5">
-                          <Text className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">
-                            Full Name
-                          </Text>
-                          <TextInput
-                            value={editName}
-                            onChangeText={setEditName}
-                            placeholder="Full Name"
-                            placeholderTextColor="#94a3b8"
-                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-slate-800 dark:text-slate-100 text-sm font-semibold"
-                          />
-                        </View>
-
-                        {/* Username field */}
-                        <View className="gap-1.5">
-                          <Text className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">
-                            Username
-                          </Text>
-                          <TextInput
-                            value={editUsername}
-                            onChangeText={setEditUsername}
-                            autoCapitalize="none"
-                            placeholder="username"
-                            placeholderTextColor="#94a3b8"
-                            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-slate-800 dark:text-slate-100 text-sm font-semibold"
-                          />
-                        </View>
-
-                        {/* Security PIN field */}
-                        <View className="gap-1.5">
-                          <Text className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">
-                            Security PIN
-                          </Text>
-                          <View style={{ position: "relative" }} className="justify-center">
-                            <TextInput
-                              value={editPin}
-                              onChangeText={setEditPin}
-                              secureTextEntry={!showPin}
-                              keyboardType="numeric"
-                              placeholder="PIN"
-                              placeholderTextColor="#94a3b8"
-                              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 pl-4 pr-12 py-3 rounded-xl text-slate-800 dark:text-slate-100 text-sm font-semibold"
-                            />
-                            <TouchableOpacity
-                              onPress={() => setShowPin(!showPin)}
-                              style={{ position: "absolute", right: 12, padding: 4 }}
-                            >
-                              <Ionicons
-                                name={showPin ? "eye-off-outline" : "eye-outline"}
-                                size={20}
-                                color="#94a3b8"
-                              />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      </View>
-
-                      {/* Action Buttons */}
-                      <View className="gap-3">
-                        {/* Save Button */}
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          onPress={handleSaveProfile}
-                          disabled={profileUpdating}
-                          className="bg-[#a133b2] py-3.5 rounded-2xl items-center"
-                          style={{ shadowColor: "#a133b2", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4 }}
-                        >
-                          <Text className="text-white font-bold text-sm">
-                            {profileUpdating ? "Saving Changes..." : "Save Changes"}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Cancel / Back to Chats */}
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          onPress={() => setRealActiveTab("chats")}
-                          className="bg-transparent py-3.5 rounded-2xl items-center border border-slate-200 dark:border-slate-800"
-                        >
-                          <Text className="text-slate-500 dark:text-slate-400 font-bold text-sm">
-                            Back to Chats
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Logout */}
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          onPress={handleLogout}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 8,
-                            backgroundColor: "#fff1f2",
-                            borderWidth: 1,
-                            borderColor: "#fecdd3",
-                            paddingVertical: 14,
-                            borderRadius: 16,
-                          }}
-                        >
-                          <Ionicons name="log-out-outline" size={18} color="#ef4444" />
-                          <Text style={{ color: "#ef4444", fontWeight: "800", fontSize: 14 }}>
-                            Log Out
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-                />
-              </KeyboardAvoidingView>
-            )}
-          </View>
-
-        </SafeAreaView>
-
-        {/* Custom Bottom Tab Bar */}
-        <View
-          className="absolute left-4 right-4 flex-row bg-white/95 dark:bg-slate-900/95 py-3 px-2 justify-around rounded-full"
-          style={{ bottom: Math.max(insets.bottom, 16) }}
-        >
-          <TouchableOpacity onPress={() => setRealActiveTab("chats")} className="items-center py-1 flex-1">
-            <Ionicons
-              name={realActiveTab === "chats" ? "chatbubbles" : "chatbubbles-outline"}
-              size={20}
-              color={realActiveTab === "chats" ? "#a133b2" : "#94a3b8"}
-            />
-            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "chats" ? "text-[#a133b2]" : "text-slate-400"}`}>
-              Chats
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setRealActiveTab("explore")} className="items-center py-1 flex-1">
-            <Ionicons
-              name={realActiveTab === "explore" ? "compass" : "compass-outline"}
-              size={20}
-              color={realActiveTab === "explore" ? "#a133b2" : "#94a3b8"}
-            />
-            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "explore" ? "text-[#a133b2]" : "text-slate-400"}`}>
-              Explore
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setRealActiveTab("requests")} className="items-center py-1 flex-1" style={{ position: "relative" }}>
-            <Ionicons
-              name={realActiveTab === "requests" ? "people" : "people-outline"}
-              size={22}
-              color={realActiveTab === "requests" ? "#a133b2" : "#94a3b8"}
-            />
-            {pendingRequests.filter(r => r.status === "pending").length > 0 && (
-              <View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  right: "20%",
-                  backgroundColor: "#ef4444",
-                  minWidth: 18,
-                  height: 18,
-                  borderRadius: 9,
-                  justifyContent: "center",
-                  alignItems: "center",
-                  paddingHorizontal: 4,
-                  borderWidth: 1.5,
-                  borderColor: "#ffffff",
-                }}
-              >
-                <Text style={{ color: "#fff", fontSize: 10, fontWeight: "900", lineHeight: 12 }}>
-                  {pendingRequests.filter(r => r.status === "pending").length}
-                </Text>
-              </View>
-            )}
-            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "requests" ? "text-[#a133b2]" : "text-slate-400"}`}>
-              Requests
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => setRealActiveTab("profile")} className="items-center py-1 flex-1">
-            <Ionicons
-              name={realActiveTab === "profile" ? "person" : "person-outline"}
-              size={20}
-              color={realActiveTab === "profile" ? "#a133b2" : "#94a3b8"}
-            />
-            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "profile" ? "text-[#a133b2]" : "text-slate-400"}`}>
-              Profile
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // ==================== 4. DEFAULT DEMO MODE MAIN DASHBOARD ====================
+  // ==================== 3 & 4. REAL/DEMO DASHBOARD VIEWS ====================
   return (
-    <View style={{ flex: 1, backgroundColor: colorScheme === "dark" ? "#020617" : "#f8fafc", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
-      <StatusBar
-        barStyle={colorScheme === "dark" ? "light-content" : "dark-content"}
-        backgroundColor={colorScheme === "dark" ? "#020617" : "#f8fafc"}
-        translucent={false}
-      />
-      <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
-        <BackgroundBlobs />
-
-        {/* Header */}
-        <View className="flex-row items-center justify-between px-5 pt-8 pb-3 bg-transparent">
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text style={{ fontSize: 27, fontWeight: "900", color: "#a133b2", letterSpacing: -0.5 }}>
-              Ripple
-            </Text>
-            <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: "#a133b2", marginLeft: 3, marginTop: 16 }} />
-          </View>
-
-          <TouchableOpacity
-            onPress={() => setCurrentMode(null)}
-            className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full"
-          >
-            <Ionicons name="exit-outline" size={18} color="#94a3b8" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Input Container */}
-        <View className="px-5 mb-5">
-          <View className="flex-row items-center bg-white dark:bg-slate-900 px-4 py-3 rounded-2xl">
-            <Feather name="search" size={18} color="#a133b2" />
-            <TextInput
-              placeholder="Search conversations..."
-              placeholderTextColor="#94a3b8"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              className="flex-1 ml-3 text-[14.5px] text-slate-800 dark:text-slate-100 font-semibold py-0.5"
-            />
-            {searchQuery.length > 0 ? (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <Ionicons name="close-circle" size={18} color="#94a3b8" />
-              </TouchableOpacity>
-            ) : (
-              <Feather name="mic" size={18} color="#94a3b8" />
-            )}
-          </View>
-        </View>
-
-        {/* Active Teammates Tray */}
-        {filteredUsers.filter(u => onlineStatus[u.id]).length > 0 && (
-          <View className="mb-6">
-            <View className="flex-row items-center justify-between px-5 mb-3">
-              <Text className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                Active Teammates
-              </Text>
-              <View className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            </View>
-            <FlatList
-              horizontal
-              data={[
-                // Inject the logged-in user at the beginning as "My Status"
-                {
-                  id: "me-status",
-                  name: "My Note",
-                  avatar: davidUser.avatar,
-                  isMe: true,
-                },
-                ...filteredUsers.filter(u => onlineStatus[u.id])
-              ]}
-              keyExtractor={(item) => `active-${item.id}`}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20 }}
-              renderItem={({ item }) => {
-                if (item.isMe) {
-                  return (
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      className="items-center mr-5"
-                    >
-                      <View className="relative">
-                        <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-                        <View className="absolute bottom-0 right-0 bg-[#a133b2] w-5 h-5 rounded-full justify-center items-center border-2 border-slate-50 dark:border-slate-950">
-                          <Feather name="plus" size={12} color="#ffffff" />
-                        </View>
-                      </View>
-                      <Text className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mt-2 text-center">
-                        My Note
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                }
-
-                return (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => setActiveUser(item as User)}
-                    className="items-center mr-5"
-                  >
-                    <View className="relative">
-                      <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
-                      <View className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-500 border-2 border-slate-50 dark:border-slate-950" />
-                    </View>
-                    <Text className="text-[11px] font-semibold text-slate-700 dark:text-slate-350 mt-2 text-center max-w-[60px]" numberOfLines={1}>
-                      {item.name.split(" ")[0]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </View>
-        )}
-
-        {/* Chats Feed List */}
-        <FlatList
-          data={filteredUsers}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setActiveUser(item)}
-              className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3"
-            >
-              <View className="relative mr-3.5">
-                <Image
-                  source={{ uri: item.avatar }}
-                  style={{ width: 48, height: 48, borderRadius: 24 }}
-                />
-                {onlineStatus[item.id] && (
-                  <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-1.5 border-white dark:border-slate-900" />
-                )}
-              </View>
-
-              <View className="flex-1 pr-2">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-[15px] font-bold text-slate-800 dark:text-slate-100">
-                    {item.name}
-                  </Text>
-                  <Text className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-                    {item.date}
-                  </Text>
-                </View>
-                <View className="flex-row items-center justify-between mt-1">
-                  <Text
-                    numberOfLines={1}
-                    className="flex-1 text-[12.5px] text-slate-500 dark:text-slate-400 font-medium mr-2"
-                  >
-                    {item.lastMessage}
-                  </Text>
-                  {item.unreadCount > 0 && (
-                    <View
-                      style={{
-                        backgroundColor: "#a133b2",
-                        minWidth: 18,
-                        height: 18,
-                        borderRadius: 9,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        paddingHorizontal: 4,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: "#ffffff",
-                          fontSize: 10,
-                          fontWeight: "bold",
-                          lineHeight: 10,
-                        }}
-                      >
-                        {item.unreadCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
-      </SafeAreaView>
-
-      {/* Full-Screen Image Viewer Modal */}
-      <Modal
-        visible={activeFullscreenImage !== null}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setActiveFullscreenImage(null)}
-      >
-        <View style={{ flex: 1, backgroundColor: "rgba(0, 0, 0, 0.95)", justifyContent: "center", alignItems: "center" }}>
-          {activeFullscreenImage && (
-            <>
-              {/* Back / Close button */}
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => setActiveFullscreenImage(null)}
-                style={{
-                  position: "absolute",
-                  top: 50,
-                  left: 20,
-                  width: 44,
-                  height: 44,
-                  borderRadius: 22,
-                  backgroundColor: "rgba(255, 255, 255, 0.15)",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 10,
-                }}
-              >
-                <Feather name="x" size={24} color="#ffffff" />
-              </TouchableOpacity>
-
-              {/* The Image itself */}
-              <Image
-                source={{ uri: activeFullscreenImage }}
-                style={{
-                  width: "90%",
-                  height: "70%",
-                }}
-                contentFit="contain"
-              />
-            </>
-          )}
-        </View>
-      </Modal>
-    </View>
+    <DashboardView
+      currentMode={currentMode}
+      setCurrentMode={setCurrentMode}
+      realActiveTab={realActiveTab}
+      setRealActiveTab={setRealActiveTab}
+      searchQuery={searchQuery}
+      setSearchQuery={setSearchQuery}
+      activeUser={activeUser}
+      setActiveUser={setActiveUser}
+      loggedInUser={loggedInUser}
+      davidUser={davidUser}
+      mockUsers={mockUsers}
+      realChats={realChats}
+      exploreUsers={exploreUsers}
+      onlineStatus={onlineStatus}
+      pendingRequests={pendingRequests}
+      sentRequests={sentRequests}
+      requestsSubTab={requestsSubTab}
+      setRequestsSubTab={setRequestsSubTab}
+      handleSendRequest={handleSendRequest}
+      handleRequestResponse={handleRequestResponse}
+      handleCancelRequest={handleCancelRequest}
+      handleResendRequest={handleResendRequest}
+      handleLogout={handleLogout}
+      colorScheme={colorScheme}
+      topPaddingOffset={topPaddingOffset}
+      handleLayout={handleLayout}
+      androidKeyboardPadding={androidKeyboardPadding}
+      editName={editName}
+      setEditName={setEditName}
+      editUsername={editUsername}
+      setEditUsername={setEditUsername}
+      editPin={editPin}
+      setEditPin={setEditPin}
+      showPin={showPin}
+      setShowPin={setShowPin}
+      editAvatarUri={editAvatarUri}
+      handlePickAvatar={handlePickAvatar}
+      profileMessage={profileMessage}
+      profileUpdating={profileUpdating}
+      handleSaveProfile={handleSaveProfile}
+      realChatsLoading={realChatsLoading}
+      exploreLoading={exploreLoading}
+      requestsLoading={requestsLoading}
+      conversations={conversations}
+      unreadCounts={unreadCounts}
+      lastActivityAt={lastActivityAt}
+    />
   );
 }

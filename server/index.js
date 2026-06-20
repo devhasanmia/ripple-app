@@ -589,8 +589,8 @@ app.post("/api/messages", async (req, res) => {
 
     const savedMsg = await newMsg.save();
 
-    // Broadcast new message to all WebSocket clients
-    broadcast({
+    // Deliver new message ONLY to the sender and the recipient — not to everyone
+    sendToUsers([senderId, partnerId], {
       type: "NEW_MESSAGE",
       partnerId,
       message: savedMsg,
@@ -609,10 +609,26 @@ const server = http.createServer(app);
 // Integrate WebSocket Server
 const wss = new WebSocketServer({ server });
 
+// Send a message to all sockets belonging to specific userIds only
+function sendToUsers(userIds, data) {
+  const messageStr = JSON.stringify(data);
+  userIds.forEach((userId) => {
+    const sockets = userSockets.get(userId);
+    if (sockets) {
+      sockets.forEach((client) => {
+        if (client.readyState === 1) {
+          client.send(messageStr);
+        }
+      });
+    }
+  });
+}
+
+// Broadcast to ALL connected clients (used only for non-private events)
 function broadcast(data) {
   const messageStr = JSON.stringify(data);
   wss.clients.forEach((client) => {
-    if (client.readyState === 1) { // OPEN
+    if (client.readyState === 1) {
       client.send(messageStr);
     }
   });
@@ -631,7 +647,12 @@ wss.on("connection", (ws) => {
         broadcast({ type: "ONLINE_STATUS", userId: parsed.userId, isOnline: true });
         console.log(`User ${parsed.userId} registered as online`);
       } else if (parsed.type === "TYPING_STATUS") {
-        broadcast(parsed);
+        // Only the partner should see the typing indicator
+        if (parsed.partnerId) {
+          sendToUsers([parsed.partnerId], parsed);
+        } else {
+          broadcast(parsed);
+        }
       } else if (parsed.type === "ONLINE_STATUS") {
         // Legacy manual toggle — still support it
         broadcast(parsed);
