@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   FlatList,
-  TextInput,
   TouchableOpacity,
   Alert,
   StatusBar,
@@ -11,6 +10,11 @@ import {
 import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ListSkeleton } from "@/components/loading-screen";
+
+import { useLoadingSimulation } from "@/hooks/use-loading-simulation";
+import { BackgroundBlobs } from "@/components/background-blobs";
+import { ScreenHeader } from "@/components/screen-header";
+import { SearchBar } from "@/components/search-bar";
 
 interface Contact {
   id: string;
@@ -65,23 +69,10 @@ const MOCK_CONTACTS: Contact[] = [
   },
 ];
 
-let hasLoadedPeople = false;
-
 export default function PeopleScreen() {
-  const [loading, setLoading] = useState(!hasLoadedPeople);
+  const loading = useLoadingSimulation("people");
   const [search, setSearch] = useState("");
   const [contacts, setContacts] = useState<Contact[]>(MOCK_CONTACTS);
-
-  // Simulate network load when screen is focused
-  useEffect(() => {
-    if (!hasLoadedPeople) {
-      const timer = setTimeout(() => {
-        setLoading(false);
-        hasLoadedPeople = true;
-      }, 700);
-      return () => clearTimeout(timer);
-    }
-  }, []);
 
   const handleSearch = (text: string) => {
     setSearch(text);
@@ -103,34 +94,11 @@ export default function PeopleScreen() {
     <SafeAreaView className="flex-1 bg-slate-50">
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" translucent={false} />
 
-      {/* Background Glowing Blobs for Premium Feel */}
-      <View className="absolute top-0 left-0 right-0 bottom-0 bg-slate-50/50 z-0 overflow-hidden">
-        <View className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-500/5 opacity-60 filter blur-3xl" />
-        <View className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-purple-500/5 opacity-40 filter blur-3xl" />
-      </View>
+      <BackgroundBlobs />
 
       <View className="flex-1 px-4 py-4 z-10">
-        {/* Header */}
-        <View className="mb-5">
-          <Text className="text-[25px] font-black text-slate-905 tracking-tight">
-            Contacts
-          </Text>
-          <Text className="text-xs text-slate-400 mt-0.5">
-            Connect with friends and teammates
-          </Text>
-        </View>
-
-        {/* Search Bar */}
-        <View className="bg-slate-100 border border-slate-200/60 rounded-full px-4.5 py-3 mb-5 flex-row items-center shadow-sm">
-          <Text className="text-slate-400 mr-2.5 text-sm">🔍</Text>
-          <TextInput
-            placeholder="Search contacts..."
-            placeholderTextColor="#94a3b8"
-            value={search}
-            onChangeText={handleSearch}
-            className="flex-1 text-[14px] text-slate-800"
-          />
-        </View>
+        <ScreenHeader title="Contacts" subtitle="Connect with friends and teammates" />
+        <SearchBar placeholder="Search contacts..." value={search} onChangeText={handleSearch} />
 
         {/* Contacts List */}
         <FlatList

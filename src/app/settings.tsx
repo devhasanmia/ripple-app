@@ -1,5 +1,5 @@
 import { LoadingScreen } from "@/components/loading-screen";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Alert,
   Image,
@@ -12,24 +12,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-let hasLoadedSettings = false;
+import { BackgroundBlobs } from "@/components/background-blobs";
+import { ScreenHeader } from "@/components/screen-header";
+import { useLoadingSimulation } from "@/hooks/use-loading-simulation";
 
 export default function SettingsScreen() {
-  const [loading, setLoading] = useState(!hasLoadedSettings);
+  const loading = useLoadingSimulation("settings", 600);
   const [activeStatus, setActiveStatus] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [dnd, setDnd] = useState(false);
-
-  // Simulate network load when screen is focused
-  useEffect(() => {
-    if (!hasLoadedSettings) {
-      const timer = setTimeout(() => {
-        setLoading(false);
-        hasLoadedSettings = true;
-      }, 600);
-      return () => clearTimeout(timer);
-    }
-  }, []);
 
   const handleAction = (title: string) => {
     Alert.alert("Settings", `Navigating to ${title} settings...`);
@@ -43,22 +34,10 @@ export default function SettingsScreen() {
     <SafeAreaView className="flex-1 bg-slate-50">
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" translucent={false} />
 
-      {/* Background Glowing Blobs for Premium Feel */}
-      <View className="absolute top-0 left-0 right-0 bottom-0 bg-slate-50/50 z-0 overflow-hidden">
-        <View className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-indigo-500/5 opacity-60 filter blur-3xl" />
-        <View className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-purple-500/5 opacity-40 filter blur-3xl" />
-      </View>
+      <BackgroundBlobs />
 
       <ScrollView className="flex-1 px-4 py-4 z-10" showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View className="mb-6">
-          <Text className="text-[25px] font-black text-slate-900 tracking-tight">
-            Settings
-          </Text>
-          <Text className="text-xs text-slate-400 mt-0.5">
-            Manage your account and preferences
-          </Text>
-        </View>
+        <ScreenHeader title="Settings" subtitle="Manage your account and preferences" />
 
         {/* Profile Card */}
         <View className="bg-white border border-slate-100 rounded-3xl p-5 shadow-lg shadow-slate-200/20 mb-6 flex-row items-center gap-4">

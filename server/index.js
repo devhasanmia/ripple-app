@@ -49,23 +49,29 @@ mongoose
 const messageSchema = new mongoose.Schema({
   partnerId: { type: String, required: true },
   senderId: { type: String, required: true },
-  type: { type: String, required: true, enum: ["text", "voice"] },
+  type: { type: String, required: true, enum: ["text", "voice", "image"] },
   text: String,
+  imageUri: String,
   waveformType: Number,
   timestamp: { type: String, required: true },
   showAvatar: Boolean,
 });
 
-// Map Mongoose _id to standard id to maintain frontend compatibility
-messageSchema.set("toJSON", {
+// Helper to format Mongoose document transforms consistently across schemas
+const toJSONConfig = (options = {}) => ({
   virtuals: true,
   transform: (doc, ret) => {
-    ret.id = ret._id.toString();
+    if (!options.isUser && ret._id) {
+      ret.id = ret._id.toString();
+    }
     delete ret._id;
     delete ret.__v;
     return ret;
   }
 });
+
+// Map Mongoose _id to standard id to maintain frontend compatibility
+messageSchema.set("toJSON", toJSONConfig());
 
 const Message = mongoose.model("Message", messageSchema);
 
@@ -83,14 +89,7 @@ const userSchema = new mongoose.Schema({
   date: { type: String, default: "" },
 });
 
-userSchema.set("toJSON", {
-  virtuals: true,
-  transform: (doc, ret) => {
-    delete ret._id;
-    delete ret.__v;
-    return ret;
-  }
-});
+userSchema.set("toJSON", toJSONConfig({ isUser: true }));
 
 const User = mongoose.model("User", userSchema);
 
@@ -101,15 +100,7 @@ const chatRequestSchema = new mongoose.Schema({
   status: { type: String, required: true, enum: ["pending", "accepted", "declined", "cancelled"], default: "pending" },
 }, { timestamps: true });
 
-chatRequestSchema.set("toJSON", {
-  virtuals: true,
-  transform: (doc, ret) => {
-    ret.id = ret._id.toString();
-    delete ret._id;
-    delete ret.__v;
-    return ret;
-  }
-});
+chatRequestSchema.set("toJSON", toJSONConfig());
 
 const ChatRequest = mongoose.model("ChatRequest", chatRequestSchema);
 
@@ -382,6 +373,20 @@ app.post("/api/requests/send", async (req, res) => {
   }
 });
 
+// Helper to map ChatRequest Mongoose models to matching frontend JSON structure
+function mapChatRequest(reqObj, counterpartUser, isIncoming) {
+  const prefix = isIncoming ? "sender" : "receiver";
+  return {
+    id: reqObj.id,
+    senderId: reqObj.senderId,
+    receiverId: reqObj.receiverId,
+    status: reqObj.status,
+    [`${prefix}Name`]: counterpartUser ? counterpartUser.name : "Unknown User",
+    [`${prefix}Avatar`]: counterpartUser ? counterpartUser.avatar : "",
+    updatedAt: reqObj.updatedAt,
+  };
+}
+
 app.get("/api/requests/pending/:userId", async (req, res) => {
   const { userId } = req.params;
   try {
@@ -391,15 +396,7 @@ app.get("/api/requests/pending/:userId", async (req, res) => {
 
     const requestData = requests.map(reqObj => {
       const sender = senders.find(s => s.id === reqObj.senderId);
-      return {
-        id: reqObj.id,
-        senderId: reqObj.senderId,
-        receiverId: reqObj.receiverId,
-        status: reqObj.status,
-        senderName: sender ? sender.name : "Unknown User",
-        senderAvatar: sender ? sender.avatar : "",
-        updatedAt: reqObj.updatedAt,
-      };
+      return mapChatRequest(reqObj, sender, true);
     });
 
     res.json(requestData);
@@ -418,15 +415,7 @@ app.get("/api/requests/sent/:userId", async (req, res) => {
 
     const requestData = requests.map(reqObj => {
       const receiver = receivers.find(r => r.id === reqObj.receiverId);
-      return {
-        id: reqObj.id,
-        senderId: reqObj.senderId,
-        receiverId: reqObj.receiverId,
-        status: reqObj.status,
-        receiverName: receiver ? receiver.name : "Unknown User",
-        receiverAvatar: receiver ? receiver.avatar : "",
-        updatedAt: reqObj.updatedAt,
-      };
+      return mapChatRequest(reqObj, receiver, false);
     });
 
     res.json(requestData);
@@ -564,16 +553,35 @@ app.get("/api/users/me", async (req, res) => {
 });
 
 app.post("/api/messages", async (req, res) => {
-  const { partnerId, senderId, type, text, waveformType, timestamp } = req.body;
+  const { partnerId, senderId, type, text, imageUri, waveformType, timestamp } = req.body;
   if (!partnerId || !senderId) {
     return res.status(400).json({ error: "Missing partnerId or senderId" });
   }
 
   try {
+    let finalImageUri = imageUri;
+    if (type === "image" && imageUri && imageUri.startsWith("data:image/")) {
+      if (isCloudinaryConfigured) {
+        try {
+          const uploadRes = await cloudinary.uploader.upload(imageUri, {
+            folder: "ripple_messages",
+            resource_type: "image",
+          });
+          finalImageUri = uploadRes.secure_url;
+          console.log("Successfully uploaded chat image to Cloudinary:", finalImageUri);
+        } catch (uploadErr) {
+          console.error("Cloudinary message image upload error:", uploadErr);
+        }
+      } else {
+        console.log("Cloudinary not configured. Storing image as raw base64 string.");
+      }
+    }
+
     const newMsg = new Message({
       partnerId,
       senderId,
       type,
+      imageUri: finalImageUri,
       text,
       waveformType,
       timestamp,

@@ -1,78 +1,40 @@
 import { ListSkeleton } from "@/components/loading-screen";
 import "@/global.css";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import Constants from "expo-constants";
+import { useAudioPlayer } from "expo-audio";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { useAudioPlayer } from "expo-audio";
 import { useEffect, useRef, useState } from "react";
 import {
-  Animated,
+  Alert,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme
+  useColorScheme,
+  Modal
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-// --- Backend URL helper ---
-const getBackendUrls = () => {
-  let host = "localhost";
-  if (Constants.expoConfig?.hostUri) {
-    host = Constants.expoConfig.hostUri.split(':')[0];
-  }
-  return {
-    api: `http://${host}:3000`,
-    ws: `ws://${host}:3000`
-  };
-};
+import { Waveform } from "@/components/waveform";
+import { API_URL, WS_URL } from "@/constants/config";
+import { ChatMessage, ChatRequest, User } from "@/types";
+import {
+  getDateSeparatorText,
+  getDayString,
+  getMessageDate,
+  timeAgo
+} from "@/utils/date";
 
-const URLS = getBackendUrls();
-const API_URL = URLS.api;
-const WS_URL = URLS.ws;
-
-// --- Types ---
-interface User {
-  pin?: string;
-  id: string;
-  name: string;
-  username?: string;
-  avatar: string;
-  ringColor: string;
-  lastSeen: string;
-  unreadCount: number;
-  lastMessage: string;
-  date: string;
-}
-
-interface ChatMessage {
-  id: string;
-  senderId: string;
-  type: "text" | "voice";
-  text?: string;
-  waveformType?: 1 | 2 | 3;
-  timestamp: string;
-  showAvatar?: boolean;
-}
-
-interface ChatRequest {
-  id: string;
-  senderId: string;
-  receiverId: string;
-  status: "pending" | "accepted" | "declined" | "cancelled";
-  senderName: string;
-  senderAvatar: string;
-  receiverName?: string;
-  receiverAvatar?: string;
-  updatedAt?: string;
-}
+import { AuthScreen } from "@/components/auth-screen";
+import { BackgroundBlobs } from "@/components/background-blobs";
+import { ChatRoom } from "@/components/chat-room";
+import { WelcomeScreen } from "@/components/welcome-screen";
 
 // --- Mock Users ---
 const MOCK_USERS: User[] = [
@@ -85,6 +47,56 @@ const MOCK_USERS: User[] = [
     unreadCount: 2,
     lastMessage: "Hi, David. Hope you're doing....",
     date: "05 Jan",
+  },
+  {
+    id: "sarah-connor",
+    name: "Sarah Connor",
+    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+    ringColor: "#3b82f6",
+    lastSeen: "Active Now",
+    unreadCount: 0,
+    lastMessage: "Great! Let's catch up tomorrow.",
+    date: "04 Jan",
+  },
+  {
+    id: "james-smith",
+    name: "James Smith",
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
+    ringColor: "#10b981",
+    lastSeen: "Active Now",
+    unreadCount: 1,
+    lastMessage: "Hey, can you send that file?",
+    date: "03 Jan",
+  },
+  {
+    id: "emily-watson",
+    name: "Emily Watson",
+    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80",
+    ringColor: "#f59e0b",
+    lastSeen: "2h ago",
+    unreadCount: 0,
+    lastMessage: "Thanks for the call.",
+    date: "02 Jan",
+  },
+  {
+    id: "alex-mercer",
+    name: "Alex Mercer",
+    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80",
+    ringColor: "#a133b2",
+    lastSeen: "Active Now",
+    unreadCount: 0,
+    lastMessage: "Check out the new design!",
+    date: "01 Jan",
+  },
+  {
+    id: "sophia-davis",
+    name: "Sophia Davis",
+    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80",
+    ringColor: "#ec4899",
+    lastSeen: "Active Now",
+    unreadCount: 3,
+    lastMessage: "Are you coming tonight?",
+    date: "31 Dec",
   }
 ];
 
@@ -112,138 +124,18 @@ const DANIEL_CONVERSATION: ChatMessage[] = [
   { id: "9", senderId: "me", type: "voice", waveformType: 3, timestamp: "10:22 AM" },
 ];
 
-const waveHeights1 = [8, 12, 16, 10, 8, 14, 20, 16, 12, 18, 22, 14, 8, 12, 16, 10, 8, 14, 18, 12];
-const waveHeights2 = [10, 14, 18, 24, 28, 20, 16, 12, 8, 10, 16, 22, 18, 12, 14, 20, 24, 16, 10, 8, 12, 16, 22, 26, 18, 14, 12, 10, 16, 14, 8, 6];
-const waveHeights3 = [12, 16, 20, 24, 18, 14, 10, 12, 16, 22, 26, 20, 14, 12, 16, 20, 24, 18, 14, 10, 12, 16, 20, 24, 18, 14, 10, 8];
+const SARAH_CONVERSATION: ChatMessage[] = [
+  { id: "s1", senderId: "sarah-connor", type: "text", text: "Hey David! Are we still meeting?", timestamp: "3:40 PM", showAvatar: true },
+  { id: "s2", senderId: "me", type: "text", text: "Hey Sarah, yes, 4 PM works for me.", timestamp: "3:42 PM" },
+  { id: "s3", senderId: "sarah-connor", type: "text", text: "Great! Let's catch up tomorrow.", timestamp: "3:45 PM", showAvatar: true }
+];
 
-function Waveform({ type, color }: { type: 1 | 2 | 3; color: string }) {
-  const heights = type === 1 ? waveHeights1 : type === 2 ? waveHeights2 : waveHeights3;
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", height: 32, paddingHorizontal: 4 }}>
-      {heights.map((h, i) => (
-        <View
-          key={i}
-          style={{
-            height: h,
-            width: 2,
-            backgroundColor: color,
-            marginHorizontal: 1,
-            borderRadius: 9999,
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
-function TypingIndicator() {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const animateDot = (dot: Animated.Value, delay: number) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(dot, {
-            toValue: -5,
-            duration: 350,
-            useNativeDriver: Platform.OS !== "web",
-          }),
-          Animated.timing(dot, {
-            toValue: 0,
-            duration: 350,
-            useNativeDriver: Platform.OS !== "web",
-          }),
-          Animated.delay(350),
-        ])
-      );
-    };
-
-    const animation = Animated.parallel([
-      animateDot(dot1, 0),
-      animateDot(dot2, 150),
-      animateDot(dot3, 300),
-    ]);
-
-    animation.start();
-    return () => animation.stop();
-  }, [dot1, dot2, dot3]);
-
-  return (
-    <View className="flex-row items-center gap-1 px-3 py-2 rounded-2xl bg-[#f0f0f3] dark:bg-slate-800 self-start ml-11 mb-4">
-      <Animated.View
-        style={{ transform: [{ translateY: dot1 }], width: 6, height: 6, borderRadius: 3, backgroundColor: "#94a3b8" }}
-      />
-      <Animated.View
-        style={{ transform: [{ translateY: dot2 }], width: 6, height: 6, borderRadius: 3, backgroundColor: "#94a3b8" }}
-      />
-      <Animated.View
-        style={{ transform: [{ translateY: dot3 }], width: 6, height: 6, borderRadius: 3, backgroundColor: "#94a3b8" }}
-      />
-    </View>
-  );
-}
+const JAMES_CONVERSATION: ChatMessage[] = [
+  { id: "j1", senderId: "james-smith", type: "text", text: "Hey, can you send that file?", timestamp: "1:15 PM", showAvatar: true },
+  { id: "j2", senderId: "me", type: "text", text: "Sure, let me upload it.", timestamp: "1:20 PM" }
+];
 
 let hasLoadedHome = false;
-
-const getHeaderDateString = () => {
-  const date = new Date();
-  const weekday = date.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase();
-  const day = date.getDate();
-  const year = date.getFullYear();
-  return `${weekday} ${day}, ${year}`;
-};
-
-const timeAgo = (dateStr: string | Date | undefined): string => {
-  if (!dateStr) return "";
-  const now = new Date();
-  const then = new Date(dateStr as string);
-  const secs = Math.floor((now.getTime() - then.getTime()) / 1000);
-  if (secs < 60) return "just now";
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-};
-
-const getMessageDate = (item: ChatMessage) => {
-  if (!item.id || item.id.length !== 24) {
-    return new Date();
-  }
-  const sec = parseInt(item.id.substring(0, 8), 16);
-  if (isNaN(sec)) {
-    return new Date();
-  }
-  return new Date(sec * 1000);
-};
-
-const getDayString = (date: Date) => {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-};
-
-const getDateSeparatorText = (date: Date) => {
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-
-  const dStr = date.toDateString();
-  if (dStr === today.toDateString()) {
-    return "TODAY";
-  } else if (dStr === yesterday.toDateString()) {
-    return "YESTERDAY";
-  } else {
-    const weekday = date.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase();
-    const day = date.getDate();
-    const year = date.getFullYear();
-    return `${weekday} ${day}, ${year}`;
-  }
-};
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -298,13 +190,23 @@ export default function HomeScreen() {
   // Online statuses mapping: { "me": boolean, [partnerId]: boolean }
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({
     "me": true,
+    "daniel-mercer": true,
+    "sarah-connor": true,
+    "james-smith": true,
+    "alex-mercer": true,
+    "sophia-davis": true,
+    "emily-watson": false,
   });
 
   // Typing status mapping: { [userId]: boolean }
   const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
 
   // Custom message histories for different chats
-  const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({});
+  const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({
+    "daniel-mercer": DANIEL_CONVERSATION,
+    "sarah-connor": SARAH_CONVERSATION,
+    "james-smith": JAMES_CONVERSATION,
+  });
 
   const flatListRef = useRef<FlatList>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -314,6 +216,8 @@ export default function HomeScreen() {
   const [currentMode, setCurrentMode] = useState<null | "demo" | "auth" | "real">(null); // Starts on Welcome Screen (null)
   const [authScreen, setAuthScreen] = useState<"login" | "register">("login");
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null);
+  const [showEmojiTray, setShowEmojiTray] = useState(false);
+  const [activeFullscreenImage, setActiveFullscreenImage] = useState<string | null>(null);
 
   // Auth Form State
   const [formName, setFormName] = useState("");
@@ -502,7 +406,10 @@ export default function HomeScreen() {
 
               // If there's an optimistic duplicate, replace it instead of appending
               const optIndex = currentList.findIndex(
-                (m) => m.senderId === message.senderId && m.text === message.text && m.id.includes(".")
+                (m) =>
+                  m.senderId === message.senderId &&
+                  m.id.includes(".") &&
+                  (message.type === "image" ? m.type === "image" : m.text === message.text)
               );
               if (optIndex !== -1) {
                 const newList = [...currentList];
@@ -825,7 +732,7 @@ export default function HomeScreen() {
   const isCounterpartOnline = counterpartUser ? onlineStatus[counterpartUser.id] : true;
 
   const showTypingIndicator =
-    counterpartUser &&
+    !!counterpartUser &&
     !!typingStatus[counterpartUser.id];
 
   const scrollToBottom = () => {
@@ -961,6 +868,113 @@ export default function HomeScreen() {
     sendTypingStatus(activeSenderId, false);
   };
 
+  const handleSendImage = (localUri: string, base64Uri: string) => {
+    if (!activeUser) return;
+    const activeSenderId = currentMode === "real" && loggedInUser ? loggedInUser.id : currentUser;
+
+    // Play message sent sound chime
+    try {
+      sendSoundPlayer.seekTo(0);
+      sendSoundPlayer.play();
+    } catch (soundErr) {
+      console.warn("Failed to play message sent sound:", soundErr);
+    }
+
+    const timeString = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const body = {
+      partnerId: currentMode === "real" && loggedInUser
+        ? activeUser.id
+        : (currentUser === "me" ? activeUser.id : "me"),
+      senderId: activeSenderId,
+      type: "image",
+      imageUri: base64Uri,
+      timestamp: timeString,
+    };
+
+    // Optimistically update the UI locally with the local file path (faster display)
+    const tempId = Math.random().toString();
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      senderId: activeSenderId,
+      type: "image",
+      imageUri: localUri,
+      timestamp: timeString,
+    };
+
+    setConversations((prev) => ({
+      ...prev,
+      [activeUser.id]: [...(prev[activeUser.id] || []), optimisticMsg],
+    }));
+
+    if (currentMode === "real") {
+      fetch(`${API_URL}/api/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then((res) => res.json())
+        .then((savedMsg) => {
+          setConversations((prev) => {
+            const list = prev[activeUser.id] || [];
+            // If already merged by the WS socket, just remove the temp message
+            if (list.some((m) => m.id === savedMsg.id)) {
+              return {
+                ...prev,
+                [activeUser.id]: list.filter((m) => m.id !== tempId),
+              };
+            }
+            return {
+              ...prev,
+              [activeUser.id]: list.map((m) => (m.id === tempId ? savedMsg : m)),
+            };
+          });
+        })
+        .catch((err) => console.error("Error sending image message:", err));
+    }
+  };
+
+  const handlePickChatImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "We need access to your photos to send images.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.6,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const localUri = asset.uri;
+      const base64Data = asset.base64;
+
+      if (!base64Data) {
+        Alert.alert("Error", "Could not read the selected image.");
+        return;
+      }
+
+      const imageBase64Uri = `data:image/jpeg;base64,${base64Data}`;
+      handleSendImage(localUri, imageBase64Uri);
+    } catch (err) {
+      console.error("Image picking error:", err);
+      Alert.alert("Error", "An error occurred while picking the image.");
+    }
+  };
+
+
+
   const renderMessageItem = ({ item, index }: { item: ChatMessage; index: number }) => {
     const isSent = item.senderId === (currentMode === "real" && loggedInUser ? loggedInUser.id : currentUser);
     const sender = isSent
@@ -982,11 +996,18 @@ export default function HomeScreen() {
       if (isSent) {
         messageBubble = (
           <View className="flex-row justify-end mb-4">
-            <View style={{ borderTopRightRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }} className="flex-row items-center bg-[#f4e5f6] rounded-2xl">
-              <Waveform type={item.waveformType || 1} color="#a133b2" />
-              <TouchableOpacity activeOpacity={0.7} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", marginLeft: 10 }}>
-                <Ionicons name="play" size={12} color="#a133b2" style={{ marginLeft: 2 }} />
-              </TouchableOpacity>
+            <View style={{ borderTopRightRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }} className="flex-col bg-[#f4e5f6] rounded-2xl">
+              <View className="flex-row items-center">
+                <Waveform type={item.waveformType || 1} color="#a133b2" />
+                <TouchableOpacity activeOpacity={0.7} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", marginLeft: 10 }}>
+                  <Ionicons name="play" size={12} color="#a133b2" style={{ marginLeft: 2 }} />
+                </TouchableOpacity>
+              </View>
+              {item.timestamp ? (
+                <Text style={{ alignSelf: "flex-end", fontSize: 9, opacity: 0.65, marginTop: 4 }} className="text-[#a133b2] font-semibold">
+                  {item.timestamp}
+                </Text>
+              ) : null}
             </View>
           </View>
         );
@@ -1001,15 +1022,67 @@ export default function HomeScreen() {
                 </>
               ) : null}
             </View>
-            <View style={{ borderTopLeftRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }} className="flex-row items-center bg-[#f0f0f3] dark:bg-slate-800 rounded-2xl">
-              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", marginRight: 10 }}>
-                <Text style={{ fontSize: 18, fontWeight: "bold", color: "#1e293b", marginTop: 4 }}>"</Text>
+            <View style={{ borderTopLeftRadius: 0, paddingHorizontal: 16, paddingVertical: 10 }} className="flex-col bg-[#f0f0f3] dark:bg-slate-800 rounded-2xl">
+              <View className="flex-row items-center">
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center", marginRight: 10 }}>
+                  <Text style={{ fontSize: 18, fontWeight: "bold", color: "#1e293b", marginTop: 4 }}>"</Text>
+                </View>
+                <Waveform type={item.waveformType || 2} color="#1e293b" />
               </View>
-              <Waveform type={item.waveformType || 2} color="#1e293b" />
+              {item.timestamp ? (
+                <Text style={{ alignSelf: "flex-end", fontSize: 9, opacity: 0.5, marginTop: 4 }} className="text-slate-500 dark:text-slate-400 font-semibold">
+                  {item.timestamp}
+                </Text>
+              ) : null}
             </View>
           </View>
         );
       }
+    } else if (item.type === "image") {
+      messageBubble = (
+        <View className={`flex-row mb-4 items-end ${isSent ? "justify-end" : "justify-start"}`}>
+          {!isSent && (
+            <View style={{ width: 32, height: 32, marginRight: 8, position: "relative" }}>
+              {showAvatar && sender ? (
+                <>
+                  <Image source={{ uri: sender.avatar }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                  <View style={{ position: "absolute", top: -1, right: -1, width: 10, height: 10, borderRadius: 5, backgroundColor: statusDotColor, borderWidth: 1.5, borderColor: "#ffffff" }} />
+                </>
+              ) : null}
+            </View>
+          )}
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => item.imageUri && setActiveFullscreenImage(item.imageUri)}
+            style={isSent ? { borderTopRightRadius: 0, padding: 4 } : { borderTopLeftRadius: 0, padding: 4 }}
+            className={`max-w-[75%] rounded-2xl flex-col relative overflow-hidden ${isSent ? "bg-[#f4e5f6]" : "bg-[#f0f0f3] dark:bg-slate-800"}`}
+          >
+            <Image
+              source={{ uri: item.imageUri }}
+              style={{ width: 220, height: 160, borderRadius: 12 }}
+              contentFit="cover"
+            />
+            {item.timestamp ? (
+              <View 
+                style={{ 
+                  position: "absolute", 
+                  bottom: 8, 
+                  right: 8, 
+                  backgroundColor: "rgba(0,0,0,0.55)", 
+                  paddingHorizontal: 6, 
+                  paddingVertical: 2, 
+                  borderRadius: 6 
+                }}
+              >
+                <Text style={{ fontSize: 9, color: "#ffffff", fontWeight: "600" }}>
+                  {item.timestamp}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
+      );
     } else {
       messageBubble = (
         <View className={`flex-row mb-4 items-end ${isSent ? "justify-end" : "justify-start"}`}>
@@ -1026,15 +1099,21 @@ export default function HomeScreen() {
 
           <View
             style={isSent ? { borderTopRightRadius: 0, paddingHorizontal: 18, paddingVertical: 10 } : { borderTopLeftRadius: 0, paddingHorizontal: 18, paddingVertical: 10 }}
-            className={`max-w-[75%] rounded-2xl ${isSent ? "bg-[#f4e5f6]" : "bg-[#f0f0f3] dark:bg-slate-800"
-              }`}
+            className={`max-w-[75%] rounded-2xl flex-col ${isSent ? "bg-[#f4e5f6]" : "bg-[#f0f0f3] dark:bg-slate-800"}`}
           >
             <Text
-              className={`text-[15px] leading-5 ${isSent ? "text-[#a133b2] font-semibold" : "text-slate-800 dark:text-slate-100"
-                }`}
+              className={`text-[15px] leading-5 ${isSent ? "text-[#a133b2] font-semibold" : "text-slate-800 dark:text-slate-100"}`}
             >
               {item.text}
             </Text>
+            {item.timestamp ? (
+              <Text
+                style={{ alignSelf: "flex-end", fontSize: 9, opacity: isSent ? 0.65 : 0.5, marginTop: 4 }}
+                className={isSent ? "text-[#a133b2] font-semibold" : "text-slate-500 dark:text-slate-400 font-semibold"}
+              >
+                {item.timestamp}
+              </Text>
+            ) : null}
           </View>
         </View>
       );
@@ -1065,379 +1144,127 @@ export default function HomeScreen() {
   const topPaddingOffset = Platform.OS === "web" ? 64 : 0;
 
   // --- SUB-SCREEN: CHAT ROOM SCREEN (If activeUser is selected) ---
+  // --- SUB-SCREEN: CHAT ROOM SCREEN (If activeUser is selected) ---
   if (activeUser && counterpartUser) {
-    const activeSenderId = currentMode === "real" && loggedInUser ? loggedInUser.id : currentUser;
     return (
-      <View style={{ flex: 1, backgroundColor: "#ffffff", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
-        <StatusBar
-          barStyle={colorScheme === "dark" ? "light-content" : "dark-content"}
-          backgroundColor={colorScheme === "dark" ? "#020617" : "#ffffff"}
-          translucent={false}
+      <>
+        <ChatRoom
+          activeUser={activeUser}
+          counterpartUser={counterpartUser}
+          currentUser={currentUser}
+          setCurrentUser={setCurrentUser}
+          davidUser={davidUser}
+          loggedInUser={loggedInUser}
+          currentMode={currentMode}
+          activeMessages={activeMessages}
+          renderMessageItem={renderMessageItem}
+          showTypingIndicator={showTypingIndicator}
+          draftText={draftText}
+          handleDraftChange={handleDraftChange}
+          handleSend={handleSend}
+          toggleOnline={toggleOnline}
+          isCounterpartOnline={isCounterpartOnline}
+          colorScheme={colorScheme}
+          handleLayout={handleLayout}
+          androidKeyboardPadding={androidKeyboardPadding}
+          topPaddingOffset={topPaddingOffset}
+          onBack={() => {
+            setActiveUser(null);
+            setShowEmojiTray(false);
+          }}
+          flatListRef={flatListRef}
+          handlePickChatImage={handlePickChatImage}
+          showEmojiTray={showEmojiTray}
+          setShowEmojiTray={setShowEmojiTray}
         />
-        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
-          {/* Header */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              backgroundColor: "#ffffff",
-              borderBottomWidth: 1,
-              borderBottomColor: "#f1f5f9",
-            }}
-            className="dark:bg-slate-900 dark:border-slate-850"
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-              {/* Back Button */}
-              <TouchableOpacity activeOpacity={0.7} onPress={() => setActiveUser(null)} className="p-1 mr-3">
-                <Ionicons name="arrow-back" size={24} color="#1e293b" className="dark:text-slate-100" />
-              </TouchableOpacity>
 
-              {/* Avatar with status dot */}
-              <View style={{ position: "relative", marginRight: 16 }}>
-                <Image source={{ uri: counterpartUser.avatar }} style={{ width: 40, height: 40, borderRadius: 20 }} />
-                <View
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    bottom: 0,
-                    width: 12,
-                    height: 12,
-                    backgroundColor: isCounterpartOnline ? "#10b981" : "#94a3b8",
-                    borderWidth: 2,
-                    borderColor: "#ffffff",
-                    borderRadius: 6,
-                  }}
-                />
-              </View>
-
-              {/* Title & Status */}
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Text className="text-base font-bold text-slate-800 dark:text-slate-100 font-sans">{counterpartUser.name}</Text>
-
-                  {/* Status Toggle Switch */}
-                  <TouchableOpacity
-                    onPress={toggleOnline}
-                    className={`px-2 py-0.5 rounded-full border ${isCounterpartOnline
-                      ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-955 dark:border-emerald-900"
-                      : "bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700"
-                      }`}
-                  >
-                    <Text className={`text-[9px] font-extrabold ${isCounterpartOnline ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500"}`}>
-                      {isCounterpartOnline ? "ONLINE" : "OFFLINE"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View className="flex-row items-center mt-0.5">
-                  <Text className="text-xs text-slate-400 dark:text-slate-500 font-medium">{isCounterpartOnline ? "Active Now" : "Offline"}</Text>
-                  {isCounterpartOnline && (
-                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#a133b2", marginLeft: 6 }} />
-                  )}
-                </View>
-              </View>
-            </View>
-
-            {/* Custom Sender Toggle Switch (Demo mode only) */}
-            {currentMode === "demo" && (
-              <View style={{ alignItems: "center", gap: 3 }}>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    const nextUser = currentUser === "me" ? activeUser.id : "me";
-                    setCurrentUser(nextUser);
-                  }}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: colorScheme === "dark" ? "#334155" : "#e2e8f0",
-                    borderRadius: 18,
-                    padding: 2,
-                    position: "relative",
-                    width: 68,
-                    height: 32,
-                  }}
-                >
-                  {/* Active Indicator Slider */}
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 2,
-                      left: currentUser === "me" ? 2 : 38,
-                      width: 28,
-                      height: 28,
-                      borderRadius: 14,
-                      backgroundColor: "#ffffff",
-                      shadowColor: "#000",
-                      shadowOffset: { width: 0, height: 1 },
-                      shadowOpacity: 0.15,
-                      shadowRadius: 1,
-                      elevation: 1,
-                    }}
-                  />
-                  {/* David Avatar */}
-                  <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", zIndex: 1, opacity: currentUser === "me" ? 1 : 0.4 }}>
-                    <Image
-                      source={{ uri: davidUser.avatar }}
-                      style={{ width: 22, height: 22, borderRadius: 11 }}
-                    />
-                  </View>
-                  {/* Active Counterpart Avatar */}
-                  <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", zIndex: 1, opacity: currentUser === activeUser.id ? 1 : 0.4 }}>
-                    <Image
-                      source={{ uri: activeUser.avatar }}
-                      style={{ width: 22, height: 22, borderRadius: 11 }}
-                    />
-                  </View>
-                </TouchableOpacity>
-                <Text className="text-[8px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                  Selected User: {currentUser === "me" ? "David" : activeUser.name.split(" ")[0]}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Keyboard Avoiding View wrapping both Messages Stream and Input */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            style={{ flex: 1, paddingBottom: Platform.OS === "android" ? androidKeyboardPadding : 0 }}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-          >
-            {/* Messages Stream */}
-            <FlatList
-              ref={flatListRef}
-              data={activeMessages}
-              keyExtractor={(item) => item.id}
-              renderItem={renderMessageItem}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16 }}
-              className="flex-1 bg-white dark:bg-slate-950"
-              ListHeaderComponent={null}
-              ListFooterComponent={
-                showTypingIndicator ? (
-                  <View className="px-4 mb-4">
-                    <View className="flex-row items-center mb-1 ml-11">
-                      <Text className="text-[11px] font-bold text-slate-400 italic">
-                        {counterpartUser.name} is typing
-                      </Text>
-                    </View>
-                    <TypingIndicator />
-                  </View>
-                ) : null
-              }
-            />
-            <View className="flex-row items-center px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
-              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#f5f5f7", borderRadius: 22, paddingHorizontal: 16, height: 44 }} className="dark:bg-slate-800">
-                <TextInput
-                  value={draftText[activeSenderId] || ""}
-                  onChangeText={handleDraftChange}
-                  onSubmitEditing={handleSend}
-                  placeholder={
-                    currentMode === "real" && loggedInUser
-                      ? `Send as ${loggedInUser.name.split(" ")[0]}...`
-                      : `Send as ${currentUser === "me" ? "David" : activeUser.name.split(" ")[0]}...`
-                  }
-                  placeholderTextColor="#94a3b8"
-                  style={{ flex: 1, color: "#1e293b", fontSize: 15, paddingVertical: 8 }}
-                  className="dark:text-slate-100"
-                />
+        {/* Full-Screen Image Viewer Modal */}
+        <Modal
+          visible={activeFullscreenImage !== null}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setActiveFullscreenImage(null)}
+        >
+          <View style={{ flex: 1, backgroundColor: "rgba(0, 0, 0, 0.95)", justifyContent: "center", alignItems: "center" }}>
+            {activeFullscreenImage && (
+              <>
+                {/* Back / Close button */}
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={handleSend}
-                  disabled={!(draftText[activeSenderId] || "").trim()}
-                  style={{ padding: 4 }}
+                  onPress={() => setActiveFullscreenImage(null)}
+                  style={{
+                    position: "absolute",
+                    top: 50,
+                    left: 20,
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: "rgba(255, 255, 255, 0.15)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 10,
+                  }}
                 >
-                  <Feather name="send" size={18} color={(draftText[activeSenderId] || "").trim() ? "#a133b2" : "#94a3b8"} />
+                  <Feather name="x" size={24} color="#ffffff" />
                 </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </View>
+
+                {/* The Image itself */}
+                <Image
+                  source={{ uri: activeFullscreenImage }}
+                  style={{
+                    width: "90%",
+                    height: "70%",
+                  }}
+                  contentFit="contain"
+                />
+              </>
+            )}
+          </View>
+        </Modal>
+      </>
     );
   }
 
   // ==================== 1. WELCOME SCREEN ====================
   if (currentMode === null) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#ffffff" }} onLayout={handleLayout}>
-        <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
-        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950 justify-center items-center px-6">
-          <View className="items-center mb-12">
-            <Text className="text-5xl font-black text-[#a133b2] tracking-tighter">
-              Ripple
-            </Text>
-            <Text className="text-sm text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-2">
-              Connect Securely
-            </Text>
-          </View>
-
-          <View className="w-full bg-[#f8fafc] dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 gap-4 mb-8" style={{ shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}>
-            <Text className="text-lg font-bold text-slate-700 dark:text-slate-200 text-center mb-2">
-              Welcome to Ripple!
-            </Text>
-            <Text className="text-xs text-slate-400 dark:text-slate-400 text-center leading-5 mb-4">
-              Enter Demo Mode to test the UI interactions, or Login/Register to connect with other registered users in real-time.
-            </Text>
-
-            {/* Login Button */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                setAuthScreen("login");
-                setCurrentMode("auth");
-              }}
-              className="bg-[#a133b2] py-3.5 rounded-2xl items-center"
-              style={{ shadowColor: "#a133b2", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 }}
-            >
-              <Text className="text-white font-bold text-sm">
-                Login / Register
-              </Text>
-            </TouchableOpacity>
-
-            {/* Demo Mode Button */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => {
-                setCurrentMode("demo");
-              }}
-              className="bg-transparent py-3.5 rounded-2xl items-center border border-purple-200 dark:border-purple-800"
-            >
-              <Text className="text-[#a133b2] dark:text-purple-400 font-bold text-sm">
-                Explore Demo Mode
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text className="text-[10px] text-slate-400 font-medium absolute bottom-8">
-            Ripple Messaging App v1.0.0
-          </Text>
-        </SafeAreaView>
-      </View>
+      <WelcomeScreen
+        colorScheme={colorScheme}
+        handleLayout={handleLayout}
+        onEnterAuth={() => {
+          setAuthScreen("login");
+          setCurrentMode("auth");
+        }}
+        onEnterDemoMode={() => {
+          setCurrentMode("demo");
+        }}
+      />
     );
   }
 
   // ==================== 2. AUTH SCREEN (LOGIN/REGISTER) ====================
   if (currentMode === "auth") {
     return (
-      <View style={{ flex: 1, backgroundColor: "#ffffff" }} onLayout={handleLayout}>
-        <StatusBar barStyle={colorScheme === "dark" ? "light-content" : "dark-content"} />
-        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950">
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            style={{ flex: 1, paddingBottom: Platform.OS === "android" ? androidKeyboardPadding : 0 }}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
-          >
-            <ScrollView
-              contentContainerStyle={{
-                flexGrow: 1,
-                justifyContent: "center",
-                paddingHorizontal: 24,
-                paddingVertical: 24,
-              }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View className="mb-8 items-center">
-                <Text className="text-3xl font-black text-[#a133b2] tracking-tighter">
-                  Ripple
-                </Text>
-                <Text className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
-                  {authScreen === "login" ? "Welcome Back" : "Create Account"}
-                </Text>
-              </View>
-
-              <View className="bg-[#f8fafc] dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 gap-4" style={{ shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}>
-                {authError ? (
-                  <Text className="text-xs text-red-500 font-bold text-center bg-red-50 dark:bg-red-950 p-2.5 rounded-xl border border-red-200 dark:border-red-900">
-                    {authError}
-                  </Text>
-                ) : null}
-
-                {authScreen === "register" && (
-                  <View className="gap-1.5">
-                    <Text className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">
-                      Full Name
-                    </Text>
-                    <TextInput
-                      value={formName}
-                      onChangeText={setFormName}
-                      placeholder="e.g. John Doe"
-                      placeholderTextColor="#94a3b8"
-                      className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-slate-800 dark:text-slate-100 text-sm font-medium"
-                    />
-                  </View>
-                )}
-
-                <View className="gap-1.5">
-                  <Text className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">
-                    Username
-                  </Text>
-                  <TextInput
-                    value={formUsername}
-                    onChangeText={setFormUsername}
-                    autoCapitalize="none"
-                    placeholder="e.g. johndoe"
-                    placeholderTextColor="#94a3b8"
-                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-slate-800 dark:text-slate-100 text-sm font-medium"
-                  />
-                </View>
-
-                <View className="gap-1.5">
-                  <Text className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">
-                    Security PIN
-                  </Text>
-                  <TextInput
-                    value={formPin}
-                    onChangeText={setFormPin}
-                    secureTextEntry
-                    keyboardType="numeric"
-                    placeholder="e.g. 1234"
-                    placeholderTextColor="#94a3b8"
-                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-slate-800 dark:text-slate-100 text-sm font-medium"
-                  />
-                </View>
-
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={handleAuthSubmit}
-                  className="bg-[#a133b2] py-3.5 rounded-2xl items-center mt-2"
-                  style={{ shadowColor: "#a133b2", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 }}
-                >
-                  <Text className="text-white font-bold text-sm">
-                    {authScreen === "login" ? "Login" : "Sign Up"}
-                  </Text>
-                </TouchableOpacity>
-
-                <View className="flex-row justify-between mt-4 px-1">
-                  <TouchableOpacity
-                    onPress={() => {
-                      setAuthError("");
-                      setAuthScreen(authScreen === "login" ? "register" : "login");
-                    }}
-                  >
-                    <Text className="text-xs text-[#a133b2] dark:text-purple-400 font-bold">
-                      {authScreen === "login" ? "Need an account? Register" : "Have an account? Login"}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => {
-                      setAuthError("");
-                      setCurrentMode(null);
-                    }}
-                  >
-                    <Text className="text-xs text-slate-400 dark:text-slate-500 font-bold">
-                      Cancel
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </View>
+      <AuthScreen
+        authScreen={authScreen}
+        setAuthScreen={setAuthScreen}
+        formName={formName}
+        setFormName={setFormName}
+        formUsername={formUsername}
+        setFormUsername={setFormUsername}
+        formPin={formPin}
+        setFormPin={setFormPin}
+        authError={authError}
+        setAuthError={setAuthError}
+        onSubmit={handleAuthSubmit}
+        onCancel={() => {
+          setAuthError("");
+          setCurrentMode(null);
+        }}
+        colorScheme={colorScheme}
+        handleLayout={handleLayout}
+        androidKeyboardPadding={androidKeyboardPadding}
+      />
     );
   }
 
@@ -1448,40 +1275,45 @@ export default function HomeScreen() {
     );
 
     return (
-      <View style={{ flex: 1, backgroundColor: "#ffffff", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
+      <View style={{ flex: 1, backgroundColor: colorScheme === "dark" ? "#020617" : "#ffffff", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
         <StatusBar
           barStyle={colorScheme === "dark" ? "light-content" : "dark-content"}
           backgroundColor={colorScheme === "dark" ? "#020617" : "#ffffff"}
           translucent={false}
         />
-        <SafeAreaView className="flex-1 bg-white dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
+        <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
+          <BackgroundBlobs />
+
           {/* Real Mode Header */}
-          <View className="flex-row items-center justify-between px-5 pt-4 pb-3 bg-white dark:bg-slate-900 border-b border-slate-50 dark:border-slate-850">
+          <View className="flex-row items-center justify-between px-5 pt-8 pb-3 bg-transparent">
             <View className="flex-row items-center gap-3">
-              <Image source={{ uri: loggedInUser?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+              <Image source={{ uri: loggedInUser?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" }} style={{ width: 38, height: 38, borderRadius: 19 }} />
               <View>
-                <Text className="text-sm font-bold text-slate-800 dark:text-slate-100">{loggedInUser?.name}</Text>
+                <Text className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{loggedInUser?.name}</Text>
                 <Text className="text-[10px] text-slate-400 font-semibold">@{loggedInUser?.username}</Text>
               </View>
             </View>
-
-            <View className="flex-row items-center gap-2">
-              <Text className="text-xs font-extrabold text-[#a133b2] bg-purple-50 dark:bg-purple-950 px-2 py-0.5 rounded">REAL MODE</Text>
-            </View>
           </View>
 
-          {/* Search Input (only for Chats and Explore) */}
+          {/* Search Input Container */}
           {realActiveTab !== "requests" && realActiveTab !== "profile" && (
-            <View className="px-5 mt-4 mb-2">
-              <View className="flex-row items-center bg-[#f5f5f7] dark:bg-slate-800 px-4 py-1.5 rounded-full">
-                <Ionicons name="search" size={18} color="#a133b2" />
+            <View className="px-5 mb-5">
+              <View className="flex-row items-center bg-white dark:bg-slate-900 px-4 py-3 rounded-2xl">
+                <Feather name="search" size={18} color="#a133b2" />
                 <TextInput
-                  placeholder="Search here.."
+                  placeholder="Search conversations..."
                   placeholderTextColor="#94a3b8"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  className="flex-1 ml-3 text-[14.5px] text-slate-800 dark:text-slate-100 py-1"
+                  className="flex-1 ml-3 text-[14.5px] text-slate-800 dark:text-slate-100 font-semibold py-0.5"
                 />
+                {searchQuery.length > 0 ? (
+                  <TouchableOpacity onPress={() => setSearchQuery("")}>
+                    <Ionicons name="close-circle" size={18} color="#94a3b8" />
+                  </TouchableOpacity>
+                ) : (
+                  <Feather name="mic" size={18} color="#94a3b8" />
+                )}
               </View>
             </View>
           )}
@@ -1497,27 +1329,94 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               ) : (
-                <FlatList
-                  data={filteredRealUsers}
-                  keyExtractor={(item) => item.id}
-                  showsVerticalScrollIndicator={false}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      onPress={() => setActiveUser(item)}
-                      className="flex-row items-center py-3.5 border-b border-slate-50 dark:border-slate-850"
-                    >
-                      <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: item.ringColor, padding: 1.5, marginRight: 14 }}>
-                        <Image source={{ uri: item.avatar }} style={{ width: "100%", height: "100%", borderRadius: 20 }} />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-[14.5px] font-bold text-slate-855 dark:text-slate-100">{item.name}</Text>
-                        <Text numberOfLines={1} className="text-xs text-slate-400 mt-0.5">@{item.username}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
-                    </TouchableOpacity>
-                  )}
-                />
+                <View className="flex-1">
+                  {/* Active Teammates Tray */}
+                  <View className="mb-6">
+                    <View className="flex-row items-center justify-between mb-3">
+                      <Text className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                        Active Teammates
+                      </Text>
+                      <View className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    </View>
+                    <FlatList
+                      horizontal
+                      data={[
+                        // Inject the logged-in user at the beginning as "My Status"
+                        {
+                          id: "me-status",
+                          name: "My Note",
+                          avatar: loggedInUser?.avatar || davidUser.avatar,
+                          isMe: true,
+                        },
+                        ...realChats.filter(u => onlineStatus[u.id])
+                      ]}
+                      keyExtractor={(item) => `active-${item.id}`}
+                      showsHorizontalScrollIndicator={false}
+                      renderItem={({ item }) => {
+                        if (item.isMe) {
+                          return (
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              className="items-center mr-5"
+                            >
+                              <View className="relative">
+                                <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+                                <View className="absolute bottom-0 right-0 bg-[#a133b2] w-5 h-5 rounded-full justify-center items-center border-2 border-slate-50 dark:border-slate-950">
+                                  <Feather name="plus" size={12} color="#ffffff" />
+                                </View>
+                              </View>
+                              <Text className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mt-2 text-center">
+                                My Note
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        }
+
+                        return (
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            onPress={() => setActiveUser(item as User)}
+                            className="items-center mr-5"
+                          >
+                            <View className="relative">
+                              <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+                              <View className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-500 border-2 border-slate-50 dark:border-slate-950" />
+                            </View>
+                            <Text className="text-[11px] font-semibold text-slate-700 dark:text-slate-350 mt-2 text-center max-w-[60px]" numberOfLines={1}>
+                              {item.name.split(" ")[0]}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      }}
+                    />
+                  </View>
+
+                  <FlatList
+                    data={filteredRealUsers}
+                    keyExtractor={(item) => item.id}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 120 }}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => setActiveUser(item)}
+                        className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3"
+                      >
+                        <View className="relative mr-3.5">
+                          <Image source={{ uri: item.avatar }} style={{ width: 46, height: 46, borderRadius: 23 }} />
+                          {onlineStatus[item.id] && (
+                            <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-1.5 border-white dark:border-slate-900" />
+                          )}
+                        </View>
+                        <View className="flex-1">
+                          <Text className="text-[14.5px] font-bold text-slate-800 dark:text-slate-100">{item.name}</Text>
+                          <Text numberOfLines={1} className="text-xs text-slate-400 mt-0.5">@{item.username}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
               )
             )}
 
@@ -1534,17 +1433,23 @@ export default function HomeScreen() {
                   data={filteredRealUsers}
                   keyExtractor={(item) => item.id}
                   showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 120 }}
                   renderItem={({ item }) => (
-                    <View className="flex-row items-center py-3.5 border-b border-slate-50 dark:border-slate-855">
-                      <Image source={{ uri: item.avatar }} style={{ width: 44, height: 44, borderRadius: 22, marginRight: 14 }} />
+                    <View className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3">
+                      <View className="relative mr-3.5">
+                        <Image source={{ uri: item.avatar }} style={{ width: 46, height: 46, borderRadius: 23 }} />
+                        {onlineStatus[item.id] && (
+                          <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-1.5 border-white dark:border-slate-900" />
+                        )}
+                      </View>
                       <View className="flex-1">
-                        <Text className="text-[14.5px] font-bold text-slate-855 dark:text-slate-100">{item.name}</Text>
+                        <Text className="text-[14.5px] font-bold text-slate-800 dark:text-slate-100">{item.name}</Text>
                         <Text className="text-xs text-slate-400 mt-0.5">@{item.username}</Text>
                       </View>
                       <TouchableOpacity
                         activeOpacity={0.8}
                         onPress={() => handleSendRequest(item.id)}
-                        className="bg-purple-50 dark:bg-purple-900 border border-purple-200 dark:border-purple-800 px-3.5 py-1.5 rounded-full"
+                        className="bg-purple-100 dark:bg-purple-950 px-4 py-2 rounded-full"
                       >
                         <Text className="text-xs font-bold text-[#a133b2] dark:text-purple-300">Request</Text>
                       </TouchableOpacity>
@@ -1556,23 +1461,21 @@ export default function HomeScreen() {
 
             {realActiveTab === "requests" && (
               <View className="flex-1">
-                {/* Segmented Selector */}
+                {/* Segmented Selector (Borderless & Shadowless) */}
                 <View className="flex-row bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
                   <TouchableOpacity
                     onPress={() => setRequestsSubTab("incoming")}
                     className={`flex-1 py-2 rounded-lg items-center ${requestsSubTab === "incoming" ? "bg-white dark:bg-slate-900" : ""}`}
-                    style={requestsSubTab === "incoming" ? { boxShadow: "0 1px 3px rgba(0,0,0,0.08)" } as any : undefined}
                   >
-                    <Text className={`text-xs font-bold ${requestsSubTab === "incoming" ? "text-[#a133b2]" : "text-slate-500"}`}>
+                    <Text className={`text-xs font-extrabold ${requestsSubTab === "incoming" ? "text-[#a133b2]" : "text-slate-500"}`}>
                       Incoming ({pendingRequests.length})
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => setRequestsSubTab("sent")}
                     className={`flex-1 py-2 rounded-lg items-center ${requestsSubTab === "sent" ? "bg-white dark:bg-slate-900" : ""}`}
-                    style={requestsSubTab === "sent" ? { boxShadow: "0 1px 3px rgba(0,0,0,0.08)" } as any : undefined}
                   >
-                    <Text className={`text-xs font-bold ${requestsSubTab === "sent" ? "text-[#a133b2]" : "text-slate-500"}`}>
+                    <Text className={`text-xs font-extrabold ${requestsSubTab === "sent" ? "text-[#a133b2]" : "text-slate-500"}`}>
                       Sent ({sentRequests.length})
                     </Text>
                   </TouchableOpacity>
@@ -1591,8 +1494,9 @@ export default function HomeScreen() {
                       data={pendingRequests}
                       keyExtractor={(item) => item.id}
                       showsVerticalScrollIndicator={false}
+                      contentContainerStyle={{ paddingBottom: 120 }}
                       renderItem={({ item }) => (
-                        <View className="flex-row items-center py-3.5 border-b border-slate-50 dark:border-slate-855">
+                        <View className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3">
                           <Image source={{ uri: item.senderAvatar }} style={{ width: 46, height: 46, borderRadius: 23, marginRight: 14 }} />
                           <View className="flex-1">
                             <Text className="text-[14.5px] font-bold text-slate-800 dark:text-slate-100">{item.senderName}</Text>
@@ -1612,21 +1516,21 @@ export default function HomeScreen() {
                               <TouchableOpacity
                                 activeOpacity={0.8}
                                 onPress={() => handleRequestResponse(item.id, "accepted")}
-                                className="bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-900 px-3 py-1.5 rounded-full"
+                                className="bg-emerald-100 dark:bg-emerald-950 px-3.5 py-1.5 rounded-full"
                               >
                                 <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Accept</Text>
                               </TouchableOpacity>
                               <TouchableOpacity
                                 activeOpacity={0.8}
                                 onPress={() => handleRequestResponse(item.id, "declined")}
-                                className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 px-3 py-1.5 rounded-full"
+                                className="bg-red-100 dark:bg-red-950 px-3.5 py-1.5 rounded-full"
                               >
                                 <Text className="text-xs font-bold text-red-500 dark:text-red-400">Decline</Text>
                               </TouchableOpacity>
                             </View>
                           )}
                           {item.status === "accepted" && (
-                            <View className="bg-emerald-50 dark:bg-emerald-950 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-900">
+                            <View className="bg-emerald-100 dark:bg-emerald-950 px-3.5 py-1.5 rounded-full">
                               <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Connected</Text>
                             </View>
                           )}
@@ -1647,12 +1551,13 @@ export default function HomeScreen() {
                       data={sentRequests}
                       keyExtractor={(item) => item.id}
                       showsVerticalScrollIndicator={false}
+                      contentContainerStyle={{ paddingBottom: 120 }}
                       renderItem={({ item }) => {
                         const isCancelled = item.status === "cancelled";
                         const isAccepted = item.status === "accepted";
                         return (
                           <View
-                            className="flex-row items-center py-3.5 border-b border-slate-50 dark:border-slate-800"
+                            className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3"
                             style={isCancelled ? { opacity: 0.65 } : undefined}
                           >
                             <View style={{ position: "relative", marginRight: 14 }}>
@@ -1688,7 +1593,7 @@ export default function HomeScreen() {
                               <TouchableOpacity
                                 activeOpacity={0.8}
                                 onPress={() => handleCancelRequest(item.id)}
-                                className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 px-3 py-1.5 rounded-full"
+                                className="bg-red-100 dark:bg-red-950 px-3.5 py-1.5 rounded-full"
                               >
                                 <Text className="text-xs font-bold text-red-500 dark:text-red-400">Cancel</Text>
                               </TouchableOpacity>
@@ -1697,24 +1602,14 @@ export default function HomeScreen() {
                               <TouchableOpacity
                                 activeOpacity={0.8}
                                 onPress={() => handleResendRequest(item.id)}
-                                style={{
-                                  backgroundColor: "#f5e6f8",
-                                  borderWidth: 1,
-                                  borderColor: "#e0b3f0",
-                                  paddingHorizontal: 12,
-                                  paddingVertical: 6,
-                                  borderRadius: 20,
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 4,
-                                }}
+                                className="bg-purple-100 dark:bg-purple-950 px-3.5 py-1.5 rounded-full flex-row items-center gap-1"
                               >
                                 <Ionicons name="refresh" size={11} color="#a133b2" />
-                                <Text style={{ fontSize: 11, fontWeight: "800", color: "#a133b2" }}>Re-send</Text>
+                                <Text className="text-xs font-extrabold text-[#a133b2] dark:text-purple-300">Re-send</Text>
                               </TouchableOpacity>
                             )}
                             {isAccepted && (
-                              <View className="bg-emerald-50 dark:bg-emerald-950 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-900">
+                              <View className="bg-emerald-100 dark:bg-emerald-950 px-3.5 py-1.5 rounded-full">
                                 <Text className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Connected</Text>
                               </View>
                             )}
@@ -1737,7 +1632,7 @@ export default function HomeScreen() {
                   data={[{ id: "profile-form" }]}
                   keyExtractor={(item) => item.id}
                   showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 30 }}
+                  contentContainerStyle={{ paddingBottom: 120 }}
                   renderItem={() => (
                     <View className="gap-6 mt-2">
                       {/* Centered Avatar Edit */}
@@ -1929,90 +1824,96 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* Custom Bottom Tab Bar */}
-          <View className="flex-row bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 py-2.5 px-4 justify-around">
-            <TouchableOpacity onPress={() => setRealActiveTab("chats")} className="items-center py-1 flex-1">
-              <Ionicons
-                name={realActiveTab === "chats" ? "chatbubbles" : "chatbubbles-outline"}
-                size={20}
-                color={realActiveTab === "chats" ? "#a133b2" : "#94a3b8"}
-              />
-              <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "chats" ? "text-[#a133b2]" : "text-slate-400"}`}>
-                Chats
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => setRealActiveTab("explore")} className="items-center py-1 flex-1">
-              <Ionicons
-                name={realActiveTab === "explore" ? "compass" : "compass-outline"}
-                size={20}
-                color={realActiveTab === "explore" ? "#a133b2" : "#94a3b8"}
-              />
-              <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "explore" ? "text-[#a133b2]" : "text-slate-400"}`}>
-                Explore
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => setRealActiveTab("requests")} className="items-center py-1 flex-1" style={{ position: "relative" }}>
-              <Ionicons
-                name={realActiveTab === "requests" ? "people" : "people-outline"}
-                size={22}
-                color={realActiveTab === "requests" ? "#a133b2" : "#94a3b8"}
-              />
-              {pendingRequests.filter(r => r.status === "pending").length > 0 && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    right: "20%",
-                    backgroundColor: "#ef4444",
-                    minWidth: 18,
-                    height: 18,
-                    borderRadius: 9,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    paddingHorizontal: 4,
-                    borderWidth: 1.5,
-                    borderColor: "#ffffff",
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontSize: 10, fontWeight: "900", lineHeight: 12 }}>
-                    {pendingRequests.filter(r => r.status === "pending").length}
-                  </Text>
-                </View>
-              )}
-              <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "requests" ? "text-[#a133b2]" : "text-slate-400"}`}>
-                Requests
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => setRealActiveTab("profile")} className="items-center py-1 flex-1">
-              <Ionicons
-                name={realActiveTab === "profile" ? "person" : "person-outline"}
-                size={20}
-                color={realActiveTab === "profile" ? "#a133b2" : "#94a3b8"}
-              />
-              <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "profile" ? "text-[#a133b2]" : "text-slate-400"}`}>
-                Profile
-              </Text>
-            </TouchableOpacity>
-          </View>
         </SafeAreaView>
+
+        {/* Custom Bottom Tab Bar */}
+        <View
+          className="absolute left-4 right-4 flex-row bg-white/95 dark:bg-slate-900/95 py-3 px-2 justify-around rounded-full"
+          style={{ bottom: Math.max(insets.bottom, 16) }}
+        >
+          <TouchableOpacity onPress={() => setRealActiveTab("chats")} className="items-center py-1 flex-1">
+            <Ionicons
+              name={realActiveTab === "chats" ? "chatbubbles" : "chatbubbles-outline"}
+              size={20}
+              color={realActiveTab === "chats" ? "#a133b2" : "#94a3b8"}
+            />
+            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "chats" ? "text-[#a133b2]" : "text-slate-400"}`}>
+              Chats
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setRealActiveTab("explore")} className="items-center py-1 flex-1">
+            <Ionicons
+              name={realActiveTab === "explore" ? "compass" : "compass-outline"}
+              size={20}
+              color={realActiveTab === "explore" ? "#a133b2" : "#94a3b8"}
+            />
+            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "explore" ? "text-[#a133b2]" : "text-slate-400"}`}>
+              Explore
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setRealActiveTab("requests")} className="items-center py-1 flex-1" style={{ position: "relative" }}>
+            <Ionicons
+              name={realActiveTab === "requests" ? "people" : "people-outline"}
+              size={22}
+              color={realActiveTab === "requests" ? "#a133b2" : "#94a3b8"}
+            />
+            {pendingRequests.filter(r => r.status === "pending").length > 0 && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  right: "20%",
+                  backgroundColor: "#ef4444",
+                  minWidth: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  paddingHorizontal: 4,
+                  borderWidth: 1.5,
+                  borderColor: "#ffffff",
+                }}
+              >
+                <Text style={{ color: "#fff", fontSize: 10, fontWeight: "900", lineHeight: 12 }}>
+                  {pendingRequests.filter(r => r.status === "pending").length}
+                </Text>
+              </View>
+            )}
+            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "requests" ? "text-[#a133b2]" : "text-slate-400"}`}>
+              Requests
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setRealActiveTab("profile")} className="items-center py-1 flex-1">
+            <Ionicons
+              name={realActiveTab === "profile" ? "person" : "person-outline"}
+              size={20}
+              color={realActiveTab === "profile" ? "#a133b2" : "#94a3b8"}
+            />
+            <Text className={`text-[10px] font-bold mt-1 ${realActiveTab === "profile" ? "text-[#a133b2]" : "text-slate-400"}`}>
+              Profile
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
   // ==================== 4. DEFAULT DEMO MODE MAIN DASHBOARD ====================
   return (
-    <View style={{ flex: 1, backgroundColor: "#ffffff", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
+    <View style={{ flex: 1, backgroundColor: colorScheme === "dark" ? "#020617" : "#f8fafc", paddingTop: topPaddingOffset }} onLayout={handleLayout}>
       <StatusBar
         barStyle={colorScheme === "dark" ? "light-content" : "dark-content"}
-        backgroundColor={colorScheme === "dark" ? "#020617" : "#ffffff"}
+        backgroundColor={colorScheme === "dark" ? "#020617" : "#f8fafc"}
         translucent={false}
       />
-      <SafeAreaView className="flex-1 bg-white dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
+      <SafeAreaView className="flex-1 bg-slate-50 dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
+        <BackgroundBlobs />
+
         {/* Header */}
-        <View className="flex-row items-center justify-between px-5 pt-4 pb-3 bg-white dark:bg-slate-900 border-b border-slate-50 dark:border-slate-850">
+        <View className="flex-row items-center justify-between px-5 pt-8 pb-3 bg-transparent">
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={{ fontSize: 27, fontWeight: "900", color: "#a133b2", letterSpacing: -0.5 }}>
               Ripple
@@ -2028,20 +1929,90 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Search Input */}
-        <View className="px-5 mt-4 mb-4">
-          <View className="flex-row items-center bg-[#f5f5f7] dark:bg-slate-800 px-4 py-1.5 rounded-full">
-            <Ionicons name="search" size={18} color="#a133b2" />
+        {/* Search Input Container */}
+        <View className="px-5 mb-5">
+          <View className="flex-row items-center bg-white dark:bg-slate-900 px-4 py-3 rounded-2xl">
+            <Feather name="search" size={18} color="#a133b2" />
             <TextInput
-              placeholder="Search here.."
+              placeholder="Search conversations..."
               placeholderTextColor="#94a3b8"
               value={searchQuery}
               onChangeText={setSearchQuery}
-              className="flex-1 ml-3 text-[14.5px] text-slate-800 dark:text-slate-100 py-1"
+              className="flex-1 ml-3 text-[14.5px] text-slate-800 dark:text-slate-100 font-semibold py-0.5"
             />
-            <Ionicons name="mic-outline" size={18} color="#94a3b8" />
+            {searchQuery.length > 0 ? (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <Ionicons name="close-circle" size={18} color="#94a3b8" />
+              </TouchableOpacity>
+            ) : (
+              <Feather name="mic" size={18} color="#94a3b8" />
+            )}
           </View>
         </View>
+
+        {/* Active Teammates Tray */}
+        {filteredUsers.filter(u => onlineStatus[u.id]).length > 0 && (
+          <View className="mb-6">
+            <View className="flex-row items-center justify-between px-5 mb-3">
+              <Text className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                Active Teammates
+              </Text>
+              <View className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            </View>
+            <FlatList
+              horizontal
+              data={[
+                // Inject the logged-in user at the beginning as "My Status"
+                {
+                  id: "me-status",
+                  name: "My Note",
+                  avatar: davidUser.avatar,
+                  isMe: true,
+                },
+                ...filteredUsers.filter(u => onlineStatus[u.id])
+              ]}
+              keyExtractor={(item) => `active-${item.id}`}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20 }}
+              renderItem={({ item }) => {
+                if (item.isMe) {
+                  return (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      className="items-center mr-5"
+                    >
+                      <View className="relative">
+                        <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+                        <View className="absolute bottom-0 right-0 bg-[#a133b2] w-5 h-5 rounded-full justify-center items-center border-2 border-slate-50 dark:border-slate-950">
+                          <Feather name="plus" size={12} color="#ffffff" />
+                        </View>
+                      </View>
+                      <Text className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mt-2 text-center">
+                        My Note
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+
+                return (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => setActiveUser(item as User)}
+                    className="items-center mr-5"
+                  >
+                    <View className="relative">
+                      <Image source={{ uri: item.avatar }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+                      <View className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-500 border-2 border-slate-50 dark:border-slate-950" />
+                    </View>
+                    <Text className="text-[11px] font-semibold text-slate-700 dark:text-slate-350 mt-2 text-center max-w-[60px]" numberOfLines={1}>
+                      {item.name.split(" ")[0]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        )}
 
         {/* Chats Feed List */}
         <FlatList
@@ -2053,31 +2024,33 @@ export default function HomeScreen() {
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => setActiveUser(item)}
-              className="flex-row items-center py-3.5 border-b border-slate-50 dark:border-slate-850"
+              className="flex-row items-center p-3.5 bg-white dark:bg-slate-900 rounded-2xl mb-3"
             >
-              <View
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
-                  borderWidth: 2,
-                  borderColor: item.ringColor,
-                  padding: 2,
-                  marginRight: 14,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
+              <View className="relative mr-3.5">
                 <Image
                   source={{ uri: item.avatar }}
-                  style={{ width: "100%", height: "100%", borderRadius: 20 }}
+                  style={{ width: 48, height: 48, borderRadius: 24 }}
                 />
+                {onlineStatus[item.id] && (
+                  <View className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-1.5 border-white dark:border-slate-900" />
+                )}
               </View>
 
               <View className="flex-1 pr-2">
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <Text className="text-[15px] font-bold text-slate-855 dark:text-slate-100">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[15px] font-bold text-slate-800 dark:text-slate-100">
                     {item.name}
+                  </Text>
+                  <Text className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+                    {item.date}
+                  </Text>
+                </View>
+                <View className="flex-row items-center justify-between mt-1">
+                  <Text
+                    numberOfLines={1}
+                    className="flex-1 text-[12.5px] text-slate-500 dark:text-slate-400 font-medium mr-2"
+                  >
+                    {item.lastMessage}
                   </Text>
                   {item.unreadCount > 0 && (
                     <View
@@ -2089,7 +2062,6 @@ export default function HomeScreen() {
                         alignItems: "center",
                         justifyContent: "center",
                         paddingHorizontal: 4,
-                        marginLeft: 6,
                       }}
                     >
                       <Text
@@ -2105,21 +2077,55 @@ export default function HomeScreen() {
                     </View>
                   )}
                 </View>
-                <Text
-                  numberOfLines={1}
-                  className="text-[12.5px] mt-1 text-slate-400 dark:text-slate-500 font-medium"
-                >
-                  {item.lastMessage}
-                </Text>
               </View>
-
-              <Text className="text-[11px] text-slate-400 dark:text-slate-650 font-medium">
-                {item.date}
-              </Text>
             </TouchableOpacity>
           )}
         />
       </SafeAreaView>
+
+      {/* Full-Screen Image Viewer Modal */}
+      <Modal
+        visible={activeFullscreenImage !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setActiveFullscreenImage(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0, 0, 0, 0.95)", justifyContent: "center", alignItems: "center" }}>
+          {activeFullscreenImage && (
+            <>
+              {/* Back / Close button */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setActiveFullscreenImage(null)}
+                style={{
+                  position: "absolute",
+                  top: 50,
+                  left: 20,
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: "rgba(255, 255, 255, 0.15)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                }}
+              >
+                <Feather name="x" size={24} color="#ffffff" />
+              </TouchableOpacity>
+
+              {/* The Image itself */}
+              <Image
+                source={{ uri: activeFullscreenImage }}
+                style={{
+                  width: "90%",
+                  height: "70%",
+                }}
+                contentFit="contain"
+              />
+            </>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
