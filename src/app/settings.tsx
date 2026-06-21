@@ -42,15 +42,15 @@ export default function SettingsScreen() {
         {/* Profile Card */}
         <View className="bg-white border border-slate-100 rounded-3xl p-5 shadow-lg shadow-slate-200/20 mb-6 flex-row items-center gap-4">
           <Image
-            source={{ uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80" }}
+            source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" }}
             className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200/50"
           />
           <View className="flex-1">
             <Text className="text-lg font-bold text-slate-900">
-              Sarah Connor
+              David
             </Text>
             <Text className="text-xs text-slate-400 mt-0.5">
-              sarah.connor@sky.net
+              david@ripple.app
             </Text>
           </View>
           <TouchableOpacity

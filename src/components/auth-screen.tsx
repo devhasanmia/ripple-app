@@ -1,18 +1,17 @@
-import React from "react";
+import { BackgroundBlobs } from "@/components/background-blobs";
+import { Ionicons } from "@expo/vector-icons";
 import {
-  View,
+  ColorSchemeName,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
   Text,
   TextInput,
   TouchableOpacity,
-  StatusBar,
-  KeyboardAvoidingView,
-  ScrollView,
-  Platform,
-  ColorSchemeName
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { BackgroundBlobs } from "@/components/background-blobs";
 
 interface AuthScreenProps {
   authScreen: "login" | "register";
@@ -25,7 +24,7 @@ interface AuthScreenProps {
   setFormPin: (text: string) => void;
   authError: string;
   setAuthError: (text: string) => void;
-  onSubmit: () => void;
+  onSubmit: (optUsername?: string, optPin?: string) => void;
   onCancel: () => void;
   colorScheme: ColorSchemeName;
   handleLayout: (e: any) => void;
@@ -59,7 +58,7 @@ export function AuthScreen({
         translucent={false}
       />
       <SafeAreaView className="flex-1 bg-white dark:bg-slate-950" edges={["top", "bottom", "left", "right"]}>
-        
+
         {/* Background depth blobs */}
         <BackgroundBlobs />
 
@@ -174,7 +173,7 @@ export function AuthScreen({
               {/* Action Submit Button */}
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={onSubmit}
+                onPress={() => onSubmit()}
                 className="bg-[#a133b2] py-4 rounded-2xl items-center flex-row justify-center gap-2 shadow-lg shadow-purple-500/20 mt-2"
               >
                 <Text className="text-white font-bold text-sm">
@@ -197,6 +196,73 @@ export function AuthScreen({
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Quick Login options for interviewer (only shown in login screen) */}
+              {authScreen === "login" && (
+                <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: isDark ? "#1e293b" : "#f1f5f9", paddingTop: 20, gap: 14 }}>
+                  <Text className="text-[10px] font-black text-slate-450 dark:text-slate-500 uppercase tracking-widest text-center">
+                    Quick login as interviewer:
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        setFormUsername("hasan");
+                        setFormPin("4039");
+                        onSubmit("hasan", "4039");
+                      }}
+                      style={{
+                        flex: 1,
+                        backgroundColor: isDark ? "rgba(161, 51, 178, 0.1)" : "#faf5ff",
+                        paddingVertical: 14,
+                        paddingHorizontal: 12,
+                        borderRadius: 16,
+                        borderWidth: 1,
+                        borderColor: isDark ? "rgba(161, 51, 178, 0.25)" : "#f3e8ff",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <Ionicons name="person" size={13} color="#a133b2" />
+                      <View className="items-center">
+                        <Text className="text-[13.5px] font-black text-[#a133b2] dark:text-purple-300">
+                          Hasan
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => {
+                        setFormUsername("bashar");
+                        setFormPin("1234");
+                        onSubmit("bashar", "1234");
+                      }}
+                      style={{
+                        flex: 1,
+                        backgroundColor: isDark ? "rgba(16, 185, 129, 0.1)" : "#ecfdf5",
+                        paddingVertical: 14,
+                        paddingHorizontal: 12,
+                        borderRadius: 16,
+                        borderWidth: 1,
+                        borderColor: isDark ? "rgba(16, 185, 129, 0.25)" : "#d1fae5",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <Ionicons name="person" size={13} color="#059669" />
+                      <View className="items-center">
+                        <Text className="text-[13.5px] font-black text-emerald-600 dark:text-emerald-350">
+                          Bashar
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>

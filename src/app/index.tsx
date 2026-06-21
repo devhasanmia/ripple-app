@@ -37,8 +37,7 @@ import {
   DANIEL_CONVERSATION,
   DAVID_USER,
   JAMES_CONVERSATION,
-  MOCK_USERS,
-  SARAH_CONVERSATION
+  MOCK_USERS
 } from "@/constants/mock-data";
 
 let hasLoadedHome = false;
@@ -99,7 +98,6 @@ export default function HomeScreen() {
   const [onlineStatus, setOnlineStatus] = useState<Record<string, boolean>>({
     "me": true,
     "daniel-mercer": true,
-    "sarah-connor": true,
     "james-smith": true,
     "alex-mercer": true,
     "sophia-davis": true,
@@ -112,7 +110,6 @@ export default function HomeScreen() {
   // Custom message histories for different chats
   const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({
     "daniel-mercer": DANIEL_CONVERSATION,
-    "sarah-connor": SARAH_CONVERSATION,
     "james-smith": JAMES_CONVERSATION,
   });
 
@@ -638,9 +635,12 @@ export default function HomeScreen() {
     setCurrentMode(null); // Back to welcome screen
   };
 
-  const handleAuthSubmit = () => {
+  const handleAuthSubmit = (optUsername?: string, optPin?: string) => {
     setAuthError("");
-    if (!formUsername || !formPin) {
+    const usernameVal = optUsername || formUsername;
+    const pinVal = optPin || formPin;
+
+    if (!usernameVal || !pinVal) {
       setAuthError("Please fill out all fields.");
       return;
     }
@@ -655,8 +655,8 @@ export default function HomeScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formName,
-          username: formUsername,
-          pin: formPin
+          username: usernameVal,
+          pin: pinVal
         })
       })
         .then(async (res) => {
@@ -677,8 +677,8 @@ export default function HomeScreen() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: formUsername,
-          pin: formPin
+          username: usernameVal,
+          pin: pinVal
         })
       })
         .then(async (res) => {
@@ -768,6 +768,13 @@ export default function HomeScreen() {
     if (!activeUser) return;
     if (lastTypingState.current[senderId] === isTyping) return;
     lastTypingState.current[senderId] = isTyping;
+
+    if (currentMode !== "real") {
+      setTypingStatus((prev) => ({
+        ...prev,
+        [senderId]: isTyping,
+      }));
+    }
 
     if (wsRef.current && wsRef.current.readyState === 1) {
       wsRef.current.send(
@@ -1313,7 +1320,7 @@ export default function HomeScreen() {
       handleCancelRequest={handleCancelRequest}
       handleResendRequest={handleResendRequest}
       handleLogout={handleLogout}
-      colorScheme={colorScheme}
+      colorScheme={colorScheme === "unspecified" ? null : colorScheme}
       topPaddingOffset={topPaddingOffset}
       handleLayout={handleLayout}
       androidKeyboardPadding={androidKeyboardPadding}

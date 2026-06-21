@@ -27,45 +27,10 @@ interface Contact {
 const MOCK_CONTACTS: Contact[] = [
   {
     id: "1",
-    name: "Sarah Connor",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+    name: "Daniel Mercer",
+    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80",
     status: "online",
-    bio: "Looking for John. Tech enthusiast.",
-  },
-  {
-    id: "2",
-    name: "John Doe",
-    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
-    status: "offline",
-    bio: "Busy coding. Do not disturb.",
-  },
-  {
-    id: "3",
-    name: "Ellen Ripley",
-    avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=150&q=80",
-    status: "online",
-    bio: "Warrant Officer on Nostromo.",
-  },
-  {
-    id: "4",
-    name: "Luke Skywalker",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
-    status: "online",
-    bio: "May the Force be with you.",
-  },
-  {
-    id: "5",
-    name: "Bruce Wayne",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
-    status: "offline",
-    bio: "I am Gotham.",
-  },
-  {
-    id: "6",
-    name: "Tony Stark",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80",
-    status: "online",
-    bio: "I love you 3000.",
+    bio: "Active teammate. Let's chat.",
   },
 ];
 

@@ -111,9 +111,44 @@ async function seedInitialMessages() {
 
 // User Seeder
 async function seedInitialUsers() {
+  const usersToSeed = [
+    {
+      id: "hasan-id",
+      name: "Hasan",
+      username: "hasan",
+      pin: "4039",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+      ringColor: "#a133b2",
+      lastSeen: "Active Now",
+      unreadCount: 0,
+      lastMessage: "",
+      date: "",
+    },
+    {
+      id: "bashar-id",
+      name: "Bashar",
+      username: "bashar",
+      pin: "1234",
+      avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80",
+      ringColor: "#10b981",
+      lastSeen: "Active Now",
+      unreadCount: 0,
+      lastMessage: "",
+      date: "",
+    }
+  ];
+
+  for (const user of usersToSeed) {
+    const exists = await User.findOne({ username: user.username });
+    if (!exists) {
+      console.log(`Seeding user ${user.username}...`);
+      await User.create(user);
+    }
+  }
+
   const count = await User.countDocuments();
-  if (count === 0) {
-    console.log("No users found in database. Seeding initial users...");
+  if (count <= 2) {
+    console.log("Seeding default demo users...");
     const initialUsers = [
       {
         id: "me",
@@ -137,7 +172,7 @@ async function seedInitialUsers() {
       }
     ];
     await User.insertMany(initialUsers);
-    console.log("Database successfully seeded with users.");
+    console.log("Database successfully seeded with default users.");
   }
 }
 

@@ -28,35 +28,19 @@ interface CallLog {
 const MOCK_CALLS: CallLog[] = [
   {
     id: "1",
-    name: "Tony Stark",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80",
+    name: "Daniel Mercer",
+    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80",
     type: "video",
     direction: "outgoing",
     timestamp: "10 mins ago",
   },
   {
     id: "2",
-    name: "Sarah Connor",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+    name: "Daniel Mercer",
+    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80",
     type: "voice",
     direction: "incoming",
     timestamp: "1 hour ago",
-  },
-  {
-    id: "3",
-    name: "Bruce Wayne",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
-    type: "voice",
-    direction: "missed",
-    timestamp: "Yesterday",
-  },
-  {
-    id: "4",
-    name: "Ellen Ripley",
-    avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=150&q=80",
-    type: "video",
-    direction: "incoming",
-    timestamp: "2 days ago",
   },
 ];
 
